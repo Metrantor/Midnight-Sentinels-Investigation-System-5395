@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 const DataContext = createContext();
 
@@ -11,7 +10,12 @@ export const useData = () => {
   return context;
 };
 
-// Crime Types
+// Generate simple UUID without external library
+const generateId = () => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+// Crime Types 
 const CRIME_TYPES = [
   { id: 'murder', name: 'Murder', color: 'bg-red-600' },
   { id: 'piracy', name: 'Piracy', color: 'bg-orange-600' },
@@ -33,7 +37,18 @@ const RELATIONSHIP_TYPES = [
   { id: 'suspicious', name: 'Suspicious', color: 'bg-yellow-600' }
 ];
 
+// Ship Types
+const SHIP_TYPES = [
+  'Mining', 'Light Fighter', 'Heavy Fighter', 'Medium Fighter', 'Bomber',
+  'Interceptor', 'Exploration', 'Starter', 'Cargo', 'Salvage', 'Medical',
+  'Refueling', 'Repair', 'Racing', 'Touring', 'Science', 'Dropship',
+  'Gunship', 'Stealth', 'Electronic Warfare', 'Industrial', 'Construction',
+  'Plant', 'Multi-Role', 'Transport', 'Luxury', 'Patrol', 'Support',
+  'Command', 'Capital Ship', 'Corvette', 'Frigate', 'Carrier'
+];
+
 export const DataProvider = ({ children }) => {
+  // State variables
   const [organizations, setOrganizations] = useState([]);
   const [persons, setPersons] = useState([]);
   const [journals, setJournals] = useState([]);
@@ -41,200 +56,295 @@ export const DataProvider = ({ children }) => {
   const [memberships, setMemberships] = useState([]);
   const [orgRelationships, setOrgRelationships] = useState([]);
   const [incidents, setIncidents] = useState([]);
+  const [manufacturers, setManufacturers] = useState([]);
+  const [shipModels, setShipModels] = useState([]);
+  const [ships, setShips] = useState([]);
+  const [shipJournals, setShipJournals] = useState([]);
+  const [shipAssignments, setShipAssignments] = useState([]);
+  const [loading, setLoading] = useState(false);
 
+  // Load data from localStorage on mount
   useEffect(() => {
-    // Load data from localStorage
-    const storedOrganizations = localStorage.getItem('midnight-organizations');
-    const storedPersons = localStorage.getItem('midnight-persons');
-    const storedJournals = localStorage.getItem('midnight-journals');
-    const storedEntries = localStorage.getItem('midnight-person-entries');
-    const storedMemberships = localStorage.getItem('midnight-memberships');
-    const storedOrgRelationships = localStorage.getItem('midnight-org-relationships');
-    const storedIncidents = localStorage.getItem('midnight-incidents');
-
-    if (storedOrganizations) setOrganizations(JSON.parse(storedOrganizations));
-    if (storedPersons) setPersons(JSON.parse(storedPersons));
-    if (storedJournals) setJournals(JSON.parse(storedJournals));
-    if (storedEntries) setPersonEntries(JSON.parse(storedEntries));
-    if (storedMemberships) setMemberships(JSON.parse(storedMemberships));
-    if (storedOrgRelationships) setOrgRelationships(JSON.parse(storedOrgRelationships));
-    if (storedIncidents) setIncidents(JSON.parse(storedIncidents));
+    loadDataFromLocalStorage();
   }, []);
 
-  // Save to localStorage whenever data changes
-  useEffect(() => {
-    localStorage.setItem('midnight-organizations', JSON.stringify(organizations));
-  }, [organizations]);
+  const loadDataFromLocalStorage = () => {
+    const loadData = (key, setter) => {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          setter(JSON.parse(stored));
+        } catch (error) {
+          console.error(`Error loading ${key}:`, error);
+          setter([]);
+        }
+      }
+    };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-persons', JSON.stringify(persons));
-  }, [persons]);
+    loadData('midnight-organizations', setOrganizations);
+    loadData('midnight-persons', setPersons);
+    loadData('midnight-journals', setJournals);
+    loadData('midnight-person-entries', setPersonEntries);
+    loadData('midnight-memberships', setMemberships);
+    loadData('midnight-org-relationships', setOrgRelationships);
+    loadData('midnight-incidents', setIncidents);
+    loadData('midnight-manufacturers', setManufacturers);
+    loadData('midnight-ship-models', setShipModels);
+    loadData('midnight-ships', setShips);
+    loadData('midnight-ship-journals', setShipJournals);
+    loadData('midnight-ship-assignments', setShipAssignments);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-journals', JSON.stringify(journals));
-  }, [journals]);
+  // Generic CRUD operations
+  const createRecord = (table, data) => {
+    const record = {
+      ...data,
+      id: generateId(),
+      created_at: new Date().toISOString()
+    };
+    const currentData = getStateByTable(table);
+    const newData = [...currentData, record];
+    localStorage.setItem(`midnight-${table}`, JSON.stringify(newData));
+    updateStateByTable(table, newData);
+    return record;
+  };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-person-entries', JSON.stringify(personEntries));
-  }, [personEntries]);
+  const updateRecord = (table, id, updates) => {
+    const updatedRecord = {
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    const currentData = getStateByTable(table);
+    const updatedData = currentData.map(item =>
+      item.id === id ? { ...item, ...updatedRecord } : item
+    );
+    localStorage.setItem(`midnight-${table}`, JSON.stringify(updatedData));
+    updateStateByTable(table, updatedData);
+    return { id, ...updatedRecord };
+  };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-memberships', JSON.stringify(memberships));
-  }, [memberships]);
+  const deleteRecord = (table, id) => {
+    const currentData = getStateByTable(table);
+    const filteredData = currentData.filter(item => item.id !== id);
+    localStorage.setItem(`midnight-${table}`, JSON.stringify(filteredData));
+    updateStateByTable(table, filteredData);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-org-relationships', JSON.stringify(orgRelationships));
-  }, [orgRelationships]);
+  const getStateByTable = (table) => {
+    const tableMap = {
+      'organizations': organizations,
+      'persons': persons,
+      'journals': journals,
+      'person-entries': personEntries,
+      'memberships': memberships,
+      'org-relationships': orgRelationships,
+      'incidents': incidents,
+      'manufacturers': manufacturers,
+      'ship-models': shipModels,
+      'ships': ships,
+      'ship-journals': shipJournals,
+      'ship-assignments': shipAssignments
+    };
+    return tableMap[table] || [];
+  };
 
-  useEffect(() => {
-    localStorage.setItem('midnight-incidents', JSON.stringify(incidents));
-  }, [incidents]);
+  const updateStateByTable = (table, data) => {
+    const setterMap = {
+      'organizations': setOrganizations,
+      'persons': setPersons,
+      'journals': setJournals,
+      'person-entries': setPersonEntries,
+      'memberships': setMemberships,
+      'org-relationships': setOrgRelationships,
+      'incidents': setIncidents,
+      'manufacturers': setManufacturers,
+      'ship-models': setShipModels,
+      'ships': setShips,
+      'ship-journals': setShipJournals,
+      'ship-assignments': setShipAssignments
+    };
+    const setter = setterMap[table];
+    if (setter) {
+      setter(data);
+    }
+  };
 
   // Organization functions
   const addOrganization = (organization) => {
-    const newOrg = {
-      ...organization,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setOrganizations(prev => [...prev, newOrg]);
+    const newOrg = createRecord('organizations', organization);
     return newOrg;
   };
 
   const updateOrganization = (id, updates) => {
-    setOrganizations(prev =>
-      prev.map(org =>
-        org.id === id
-          ? { ...org, ...updates, updatedAt: new Date().toISOString() }
-          : org
-      )
-    );
+    const updated = updateRecord('organizations', id, updates);
+    setOrganizations(prev => prev.map(org => org.id === id ? { ...org, ...updated } : org));
+    return updated;
+  };
+
+  const deleteOrganization = (id) => {
+    deleteRecord('organizations', id);
+    setOrganizations(prev => prev.filter(org => org.id !== id));
+    setJournals(prev => prev.filter(j => j.organizationId !== id));
+    setMemberships(prev => prev.filter(m => m.organizationId !== id));
+    setOrgRelationships(prev => prev.filter(r => r.organizationId !== id && r.relatedOrganizationId !== id));
   };
 
   // Person functions
   const addPerson = (person) => {
-    const newPerson = {
-      ...person,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setPersons(prev => [...prev, newPerson]);
+    const newPerson = createRecord('persons', person);
     return newPerson;
   };
 
   const updatePerson = (id, updates) => {
-    setPersons(prev =>
-      prev.map(person =>
-        person.id === id
-          ? { ...person, ...updates, updatedAt: new Date().toISOString() }
-          : person
-      )
-    );
+    const updated = updateRecord('persons', id, updates);
+    setPersons(prev => prev.map(person => person.id === id ? { ...person, ...updated } : person));
+    return updated;
+  };
+
+  const deletePerson = (id) => {
+    deleteRecord('persons', id);
+    setPersons(prev => prev.filter(person => person.id !== id));
+    setPersonEntries(prev => prev.filter(e => e.personId !== id));
+    setMemberships(prev => prev.filter(m => m.personId !== id));
+    setShipAssignments(prev => prev.filter(sa => sa.personId !== id));
   };
 
   // Journal functions
   const addJournal = (journal) => {
-    const newJournal = {
-      ...journal,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setJournals(prev => [...prev, newJournal]);
+    const newJournal = createRecord('journals', journal);
     return newJournal;
   };
 
   const updateJournal = (id, updates) => {
-    setJournals(prev =>
-      prev.map(journal =>
-        journal.id === id
-          ? { ...journal, ...updates, updatedAt: new Date().toISOString() }
-          : journal
-      )
-    );
+    const updated = updateRecord('journals', id, updates);
+    setJournals(prev => prev.map(journal => journal.id === id ? { ...journal, ...updated } : journal));
+    return updated;
   };
 
   // Person entry functions
   const addPersonEntry = (entry) => {
-    const newEntry = {
-      ...entry,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setPersonEntries(prev => [...prev, newEntry]);
+    const newEntry = createRecord('person-entries', entry);
     return newEntry;
   };
 
   const updatePersonEntry = (id, updates) => {
-    setPersonEntries(prev =>
-      prev.map(entry =>
-        entry.id === id
-          ? { ...entry, ...updates, updatedAt: new Date().toISOString() }
-          : entry
-      )
-    );
+    const updated = updateRecord('person-entries', id, updates);
+    setPersonEntries(prev => prev.map(entry => entry.id === id ? { ...entry, ...updated } : entry));
+    return updated;
   };
 
   // Membership functions
   const addMembership = (membership) => {
-    const newMembership = {
-      ...membership,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setMemberships(prev => [...prev, newMembership]);
+    const newMembership = createRecord('memberships', membership);
     return newMembership;
   };
 
   const updateMembership = (id, updates) => {
-    setMemberships(prev =>
-      prev.map(membership =>
-        membership.id === id
-          ? { ...membership, ...updates, updatedAt: new Date().toISOString() }
-          : membership
-      )
-    );
+    const updated = updateRecord('memberships', id, updates);
+    setMemberships(prev => prev.map(membership => membership.id === id ? { ...membership, ...updated } : membership));
+    return updated;
   };
 
   const removeMembership = (id) => {
+    deleteRecord('memberships', id);
     setMemberships(prev => prev.filter(membership => membership.id !== id));
   };
 
   // Organization relationship functions
   const addOrgRelationship = (relationship) => {
-    const newRelationship = {
-      ...relationship,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setOrgRelationships(prev => [...prev, newRelationship]);
+    const newRelationship = createRecord('org-relationships', relationship);
     return newRelationship;
   };
 
   const updateOrgRelationship = (id, updates) => {
-    setOrgRelationships(prev =>
-      prev.map(rel =>
-        rel.id === id
-          ? { ...rel, ...updates, updatedAt: new Date().toISOString() }
-          : rel
-      )
-    );
+    const updated = updateRecord('org-relationships', id, updates);
+    setOrgRelationships(prev => prev.map(rel => rel.id === id ? { ...rel, ...updated } : rel));
+    return updated;
   };
 
   const removeOrgRelationship = (id) => {
+    deleteRecord('org-relationships', id);
     setOrgRelationships(prev => prev.filter(rel => rel.id !== id));
   };
 
   // Incident functions
   const addIncident = (incident) => {
-    const newIncident = {
-      ...incident,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setIncidents(prev => [...prev, newIncident]);
+    const newIncident = createRecord('incidents', incident);
     return newIncident;
   };
 
+  // Manufacturer functions
+  const addManufacturer = (manufacturer) => {
+    const newManufacturer = createRecord('manufacturers', manufacturer);
+    return newManufacturer;
+  };
+
+  const updateManufacturer = (id, updates) => {
+    const updated = updateRecord('manufacturers', id, updates);
+    setManufacturers(prev => prev.map(manufacturer => manufacturer.id === id ? { ...manufacturer, ...updated } : manufacturer));
+    return updated;
+  };
+
+  const deleteManufacturer = (id) => {
+    deleteRecord('manufacturers', id);
+    setManufacturers(prev => prev.filter(manufacturer => manufacturer.id !== id));
+    setShipModels(prev => prev.filter(model => model.manufacturerId !== id));
+  };
+
+  // Ship model functions
+  const addShipModel = (model) => {
+    const newModel = createRecord('ship-models', model);
+    return newModel;
+  };
+
+  const updateShipModel = (id, updates) => {
+    const updated = updateRecord('ship-models', id, updates);
+    setShipModels(prev => prev.map(model => model.id === id ? { ...model, ...updated } : model));
+    return updated;
+  };
+
+  const deleteShipModel = (id) => {
+    deleteRecord('ship-models', id);
+    setShipModels(prev => prev.filter(model => model.id !== id));
+  };
+
+  // Ship functions
+  const addShip = (ship) => {
+    const newShip = createRecord('ships', ship);
+    return newShip;
+  };
+
+  const updateShip = (id, updates) => {
+    const updated = updateRecord('ships', id, updates);
+    setShips(prev => prev.map(ship => ship.id === id ? { ...ship, ...updated } : ship));
+    return updated;
+  };
+
+  const deleteShip = (id) => {
+    deleteRecord('ships', id);
+    setShips(prev => prev.filter(ship => ship.id !== id));
+    setShipJournals(prev => prev.filter(j => j.shipId !== id));
+    setShipAssignments(prev => prev.filter(sa => sa.shipId !== id));
+  };
+
+  // Ship journal functions
+  const addShipJournal = (journal) => {
+    const newJournal = createRecord('ship-journals', journal);
+    return newJournal;
+  };
+
+  // Ship assignment functions
+  const addShipAssignment = (assignment) => {
+    const newAssignment = createRecord('ship-assignments', assignment);
+    return newAssignment;
+  };
+
+  const removeShipAssignment = (id) => {
+    deleteRecord('ship-assignments', id);
+    setShipAssignments(prev => prev.filter(assignment => assignment.id !== id));
+  };
+
+  // Search functions
   const searchPlayers = (query) => {
     const lowerQuery = query.toLowerCase();
     return persons.filter(person =>
@@ -242,6 +352,31 @@ export const DataProvider = ({ children }) => {
       person.handle.toLowerCase().includes(lowerQuery) ||
       person.aliases?.some(alias => alias.toLowerCase().includes(lowerQuery))
     );
+  };
+
+  const searchOrganizations = (query) => {
+    const lowerQuery = query.toLowerCase();
+    return organizations.filter(org =>
+      org.name.toLowerCase().includes(lowerQuery) ||
+      org.handle?.toLowerCase().includes(lowerQuery) ||
+      org.description?.toLowerCase().includes(lowerQuery)
+    );
+  };
+
+  const searchShips = (query) => {
+    const lowerQuery = query.toLowerCase();
+    return ships.filter(ship =>
+      ship.name.toLowerCase().includes(lowerQuery) ||
+      ship.serialNumber?.toLowerCase().includes(lowerQuery)
+    );
+  };
+
+  const globalSearch = (query) => {
+    return {
+      persons: searchPlayers(query),
+      organizations: searchOrganizations(query),
+      ships: searchShips(query)
+    };
   };
 
   const findPersonByHandle = (handle) => {
@@ -255,7 +390,6 @@ export const DataProvider = ({ children }) => {
   const getPersonCrimeStats = (personId) => {
     const entries = personEntries.filter(e => e.personId === personId);
     const crimeStats = {};
-
     entries.forEach(entry => {
       if (entry.crimeTypes) {
         entry.crimeTypes.forEach(crimeType => {
@@ -263,7 +397,6 @@ export const DataProvider = ({ children }) => {
         });
       }
     });
-
     return crimeStats;
   };
 
@@ -273,14 +406,12 @@ export const DataProvider = ({ children }) => {
       .map(m => m.personId);
 
     const crimeStats = {};
-
     orgMembers.forEach(personId => {
       const personStats = getPersonCrimeStats(personId);
       Object.keys(personStats).forEach(crimeType => {
         crimeStats[crimeType] = (crimeStats[crimeType] || 0) + personStats[crimeType];
       });
     });
-
     return crimeStats;
   };
 
@@ -300,7 +431,32 @@ export const DataProvider = ({ children }) => {
     );
   };
 
+  const getPersonShips = (personId) => {
+    const assignments = shipAssignments.filter(sa => sa.personId === personId);
+    return assignments.map(assignment => {
+      const ship = ships.find(s => s.id === assignment.shipId);
+      return { ...ship, assignment };
+    }).filter(ship => ship.id);
+  };
+
+  const getShipPersons = (shipId) => {
+    const assignments = shipAssignments.filter(sa => sa.shipId === shipId);
+    return assignments.map(assignment => {
+      const person = persons.find(p => p.id === assignment.personId);
+      return { ...person, assignment };
+    }).filter(person => person.id);
+  };
+
+  const getShipModel = (modelId) => {
+    return shipModels.find(model => model.id === modelId);
+  };
+
+  const getManufacturer = (manufacturerId) => {
+    return manufacturers.find(manufacturer => manufacturer.id === manufacturerId);
+  };
+
   const value = {
+    // Data
     organizations,
     persons,
     journals,
@@ -308,30 +464,87 @@ export const DataProvider = ({ children }) => {
     memberships,
     orgRelationships,
     incidents,
+    manufacturers,
+    shipModels,
+    ships,
+    shipJournals,
+    shipAssignments,
     CRIME_TYPES,
     RELATIONSHIP_TYPES,
+    SHIP_TYPES,
+    loading,
+    supabaseConnected: false,
+
+    // Organization functions
     addOrganization,
     updateOrganization,
+    deleteOrganization,
+
+    // Person functions
     addPerson,
     updatePerson,
+    deletePerson,
+
+    // Journal functions
     addJournal,
     updateJournal,
+
+    // Person entry functions
     addPersonEntry,
     updatePersonEntry,
+
+    // Membership functions
     addMembership,
     updateMembership,
     removeMembership,
+
+    // Organization relationship functions
     addOrgRelationship,
     updateOrgRelationship,
     removeOrgRelationship,
+
+    // Incident functions
     addIncident,
+
+    // Manufacturer functions
+    addManufacturer,
+    updateManufacturer,
+    deleteManufacturer,
+
+    // Ship model functions
+    addShipModel,
+    updateShipModel,
+    deleteShipModel,
+
+    // Ship functions
+    addShip,
+    updateShip,
+    deleteShip,
+
+    // Ship journal functions
+    addShipJournal,
+
+    // Ship assignment functions
+    addShipAssignment,
+    removeShipAssignment,
+
+    // Search functions
     searchPlayers,
+    searchOrganizations,
+    searchShips,
+    globalSearch,
     findPersonByHandle,
+
+    // Helper functions
     getPersonMemberships,
     getPersonCrimeStats,
     getOrgCrimeStats,
     hasPersonCommittedCrimes,
-    getOrgRelationships
+    getOrgRelationships,
+    getPersonShips,
+    getShipPersons,
+    getShipModel,
+    getManufacturer
   };
 
   return (

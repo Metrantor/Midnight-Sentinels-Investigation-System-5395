@@ -9,6 +9,9 @@ import PersonsPage from './pages/PersonsPage';
 import SearchPage from './pages/SearchPage';
 import IncidentPage from './pages/IncidentPage';
 import RelationshipsPage from './pages/RelationshipsPage';
+import ManufacturersPage from './pages/ManufacturersPage';
+import ShipsPage from './pages/ShipsPage';
+import UserManagementPage from './pages/UserManagementPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -64,6 +67,30 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <RelationshipsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/manufacturers"
+                element={
+                  <ProtectedRoute>
+                    <ManufacturersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ships"
+                element={
+                  <ProtectedRoute>
+                    <ShipsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute>
+                    <UserManagementPage />
                   </ProtectedRoute>
                 }
               />

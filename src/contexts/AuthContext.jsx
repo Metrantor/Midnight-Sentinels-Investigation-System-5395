@@ -10,31 +10,59 @@ export const useAuth = () => {
   return context;
 };
 
+// User roles with permissions
+export const USER_ROLES = {
+  ADMIN: {
+    id: 'admin',
+    name: 'Administrator',
+    image: '/roles/admin.png',
+    permissions: {
+      canDelete: true,
+      canCreateOrganizations: true,
+      canSearchPersons: true,
+      canViewPersonDetails: true,
+      canManageJournals: true,
+      canManageShips: true,
+      canManageUsers: true,
+      canManageManufacturers: true
+    }
+  }
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Check if user is already logged in
     const storedUser = localStorage.getItem('midnight-user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        localStorage.removeItem('midnight-user');
+      }
     }
-    setLoading(false);
   }, []);
 
-  const login = async (email, password, securityCode) => {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  const login = async (email, password) => {
+    setLoading(true);
     
-    // Mock authentication
-    if (email && password && securityCode) {
-      const userData = { email, id: Date.now() };
-      setUser(userData);
-      localStorage.setItem('midnight-user', JSON.stringify(userData));
-      return { success: true };
-    }
+    // Simulate loading
+    await new Promise(resolve => setTimeout(resolve, 500));
     
-    return { success: false, error: 'Invalid credentials' };
+    // ALWAYS SUCCESS - accept any input
+    const userData = {
+      id: 'admin-123',
+      email: email || 'admin@midnight.com',
+      role: 'admin'
+    };
+    
+    setUser(userData);
+    localStorage.setItem('midnight-user', JSON.stringify(userData));
+    setLoading(false);
+    
+    return { success: true };
   };
 
   const logout = () => {
@@ -42,18 +70,31 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('midnight-user');
   };
 
-  const sendSecurityCode = async (email) => {
-    // Simulate sending security code
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { success: true, code: '123456' }; // Mock code for demo
+  const hasPermission = (permission) => {
+    if (!user || !user.role) return false;
+    const roleData = USER_ROLES[user.role.toUpperCase()];
+    return roleData?.permissions[permission] || false;
+  };
+
+  const getUserRole = () => {
+    if (!user || !user.role) return null;
+    return USER_ROLES[user.role.toUpperCase()];
+  };
+
+  const updateUserRole = () => {
+    // Mock function
   };
 
   const value = {
     user,
     login,
     logout,
-    sendSecurityCode,
-    loading
+    loading,
+    hasPermission,
+    getUserRole,
+    updateUserRole,
+    USER_ROLES,
+    supabaseConnected: false
   };
 
   return (
