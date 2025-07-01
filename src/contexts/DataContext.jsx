@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+import { createAllTables, validateAllFields, getCreateTableSQL } from '../lib/createDatabaseTables';
 
 const DataContext = createContext();
 
@@ -12,7 +13,7 @@ export const useData = () => {
   return context;
 };
 
-// Crime Types
+// Crime Types 
 const CRIME_TYPES = [
   { id: 'murder', name: 'Murder', color: 'bg-red-600' },
   { id: 'piracy', name: 'Piracy', color: 'bg-orange-600' },
@@ -36,11 +37,12 @@ const RELATIONSHIP_TYPES = [
 
 // Ship Types
 const SHIP_TYPES = [
-  'Mining', 'Light Fighter', 'Heavy Fighter', 'Medium Fighter', 'Bomber', 'Interceptor',
-  'Exploration', 'Starter', 'Cargo', 'Salvage', 'Medical', 'Refueling', 'Repair',
-  'Racing', 'Touring', 'Science', 'Dropship', 'Gunship', 'Stealth', 'Electronic Warfare',
-  'Industrial', 'Construction', 'Plant', 'Multi-Role', 'Transport', 'Luxury', 'Patrol',
-  'Support', 'Command', 'Capital Ship', 'Corvette', 'Frigate', 'Carrier'
+  'Mining', 'Light Fighter', 'Heavy Fighter', 'Medium Fighter', 'Bomber',
+  'Interceptor', 'Exploration', 'Starter', 'Cargo', 'Salvage', 'Medical',
+  'Refueling', 'Repair', 'Racing', 'Touring', 'Science', 'Dropship',
+  'Gunship', 'Stealth', 'Electronic Warfare', 'Industrial', 'Construction',
+  'Plant', 'Multi-Role', 'Transport', 'Luxury', 'Patrol', 'Support',
+  'Command', 'Capital Ship', 'Corvette', 'Frigate', 'Carrier', 'Data Runner'
 ];
 
 export const DataProvider = ({ children }) => {
@@ -65,32 +67,73 @@ export const DataProvider = ({ children }) => {
   const [dbConnected, setDbConnected] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
 
+  // 🔥 ADMIN POLLING CONTROL
+  const [enablePolling, setEnablePolling] = useState(false);
+
   // Initialize database and load data
   useEffect(() => {
     initializeDatabase();
   }, []);
 
+  // 🔥 ADMIN POLLING ONLY
+  useEffect(() => {
+    if (!dbConnected || !user) return;
+    
+    // Only enable polling for sentinels/admins
+    const isAdmin = user.role === 'sentinel';
+    setEnablePolling(isAdmin);
+    
+    if (!isAdmin) return;
+    
+    // Poll every 30 seconds for admins only
+    const interval = setInterval(() => {
+      if (enablePolling) {
+        loadAllData();
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [dbConnected, user, enablePolling]);
+
   const initializeDatabase = async () => {
     setLoading(true);
     setConnectionError(null);
-    
+
     try {
       console.log('🔌 Testing Supabase connection...');
+
+      // 🔥 STEP 1: Test basic connection with simple query
       const { data, error } = await supabase
         .from('organizations_ms2024')
-        .select('count')
+        .select('id')
         .limit(1);
 
       if (error) {
         console.error('❌ Database connection error:', error);
-        setConnectionError(`Database error: ${error.message}`);
+        setConnectionError(`Database setup required. Please run the SQL statements shown in the console in your Supabase SQL Editor.`);
         setDbConnected(false);
         loadLocalData();
-      } else {
-        console.log('✅ Supabase connection successful!');
-        setDbConnected(true);
-        await loadAllData();
+        return;
       }
+
+      // 🔥 STEP 2: Validate assessment fields exist
+      console.log('🔍 Validating assessment fields...');
+      const fieldsValid = await validateAllFields(supabase);
+      
+      if (!fieldsValid) {
+        console.log('🛠️ ASSESSMENT FIELDS MISSING!');
+        console.log('📋 Please run this SQL in your Supabase SQL Editor:');
+        console.log(getCreateTableSQL());
+        setConnectionError(`Assessment fields missing. Please run the SQL statements shown in the console in your Supabase SQL Editor.`);
+        setDbConnected(false);
+        loadLocalData();
+        return;
+      }
+
+      console.log('✅ Database connection and schema validated!');
+      setDbConnected(true);
+      await loadAllData();
+
     } catch (error) {
       console.error('❌ Connection test failed:', error);
       setConnectionError(`Connection failed: ${error.message}`);
@@ -120,8 +163,8 @@ export const DataProvider = ({ children }) => {
   const loadAllData = async () => {
     try {
       console.log('📥 Loading all data from Supabase...');
-      
-      // Load all data in parallel with error handling
+
+      // Load data with basic fields first, then assessment fields
       const [
         orgsResult,
         personsResult,
@@ -170,21 +213,24 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  // Assessment functions
-  const updateAssessment = async (targetType, targetId, dangerLevel, notes) => {
+  // 🎯 ENHANCED: Assessment function with complete field mapping
+  const updateAssessment = async (targetType, targetId, assessmentData) => {
     checkConnection();
-    
+
     try {
-      const assessmentData = {
-        danger_level: dangerLevel,
+      // 🔥 COMPLETE UPDATE DATA WITH ALL REQUIRED FIELDS
+      const updateData = {
+        classification: assessmentData.classification,
+        danger_level: assessmentData.dangerLevel,
         assessed_by_id: user.id,
         assessed_by_name: getDisplayName(user),
         assessed_by_role: user.role,
         assessed_at: new Date().toISOString(),
-        assessment_notes: notes || null,
+        assessment_notes: assessmentData.notes ? assessmentData.notes.substring(0, 500) : null,
         updated_at: new Date().toISOString()
       };
 
+      // 🔥 CORRECT TABLE NAME MAPPING
       let tableName;
       switch (targetType) {
         case 'organization':
@@ -197,37 +243,106 @@ export const DataProvider = ({ children }) => {
           tableName = 'person_entries_ms2024';
           break;
         default:
-          throw new Error('Invalid target type');
+          throw new Error(`Invalid target type: ${targetType}`);
       }
+
+      console.log(`🔄 Updating assessment in ${tableName} for ${targetId}:`, updateData);
 
       const { data, error } = await supabase
         .from(tableName)
-        .update(assessmentData)
+        .update(updateData)
         .eq('id', targetId)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error(`❌ Assessment update failed:`, error);
+        throw error;
+      }
 
-      // Record in assessment history
-      await supabase
-        .from('assessment_history_ms2024')
-        .insert([{
-          target_type: targetType,
-          target_id: targetId,
-          new_danger_level: dangerLevel,
-          new_notes: notes,
-          changed_by_id: user.id,
-          changed_by_name: getDisplayName(user),
-          changed_by_role: user.role,
-          reason: 'Assessment update'
-        }]);
+      // Record in assessment history (if table exists)
+      try {
+        await supabase
+          .from('assessment_history_ms2024')
+          .insert([{
+            target_type: targetType,
+            target_id: targetId,
+            new_classification: assessmentData.classification,
+            new_danger_level: assessmentData.dangerLevel,
+            new_notes: assessmentData.notes,
+            changed_by_id: user.id,
+            changed_by_name: getDisplayName(user),
+            changed_by_role: user.role,
+            reason: 'Assessment update'
+          }]);
+      } catch (historyError) {
+        console.log('Warning: Could not save to history:', historyError.message);
+      }
 
       // Update local state
       await loadAllData();
+
+      console.log('✅ Assessment update successful!');
       return data;
+
     } catch (error) {
       handleDbError('Update Assessment', error);
+    }
+  };
+
+  // 🎯 ENHANCED: Status update function with complete field mapping
+  const updateStatus = async (targetType, targetId, status) => {
+    checkConnection();
+
+    try {
+      // 🔥 COMPLETE STATUS UPDATE DATA
+      const updateData = {
+        status: status,
+        status_updated_by_id: user.id,
+        status_updated_by_name: getDisplayName(user),
+        status_updated_by_role: user.role,
+        status_updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // 🔥 CORRECT TABLE NAME MAPPING
+      let tableName;
+      switch (targetType) {
+        case 'organization':
+          tableName = 'organizations_ms2024';
+          break;
+        case 'person':
+          tableName = 'persons_ms2024';
+          break;
+        case 'entry':
+          tableName = 'person_entries_ms2024';
+          break;
+        default:
+          throw new Error(`Invalid target type: ${targetType}`);
+      }
+
+      console.log(`🔄 Updating status in ${tableName} for ${targetId}:`, updateData);
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(updateData)
+        .eq('id', targetId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`❌ Status update failed:`, error);
+        throw error;
+      }
+
+      // Update local state
+      await loadAllData();
+
+      console.log('✅ Status update successful!');
+      return data;
+
+    } catch (error) {
+      handleDbError('Update Status', error);
     }
   };
 
@@ -254,10 +369,10 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  // ORGANIZATION CRUD OPERATIONS
+  // 🔥 ORGANIZATION CRUD WITH FIXED FIELD MAPPING
   const addOrganization = async (organization) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       name: organization.name,
@@ -265,9 +380,12 @@ export const DataProvider = ({ children }) => {
       type: organization.type,
       description: organization.description,
       language: organization.language || null,
-      logo_url: organization.logoUrl || null,
-      last_scanned: organization.lastScanned || null,
-      danger_level: 'unknown',
+      logo_url: organization.logoUrl || null,  // 🔥 FIXED: logoUrl -> logo_url
+      last_scanned: organization.lastScanned || null,  // 🔥 FIXED: lastScanned -> last_scanned
+      // Default assessment values
+      classification: 'harmless',
+      danger_level: 1,
+      status: 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -280,8 +398,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setOrganizations(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Organization', error);
     }
@@ -289,42 +409,59 @@ export const DataProvider = ({ children }) => {
 
   const updateOrganization = async (id, updates) => {
     checkConnection();
-    
+
     try {
+      // 🔥 FIXED FIELD MAPPING
+      const mappedUpdates = {
+        name: updates.name,
+        handle: updates.handle,
+        type: updates.type,
+        description: updates.description,
+        language: updates.language,
+        logo_url: updates.logoUrl || updates.logo_url,  // 🔥 FIXED
+        last_scanned: updates.lastScanned || updates.last_scanned,  // 🔥 FIXED
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('organizations_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(mappedUpdates)
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setOrganizations(prev => prev.map(org => org.id === id ? data : org));
       return data;
+
     } catch (error) {
       handleDbError('Update Organization', error);
     }
   };
 
-  // PERSON CRUD OPERATIONS
+  // 🔥 PERSON CRUD WITH FIXED FIELD MAPPING
   const addPerson = async (person) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       name: person.name,
       handle: person.handle,
       aliases: person.aliases || [],
-      enlist_date: person.enlistDate || null,
+      enlist_date: person.enlistDate || null,  // 🔥 FIXED: enlistDate -> enlist_date
       location: person.location || null,
       language: person.language || null,
-      avatar_url: person.avatarUrl || null,
-      pledge_rank: person.pledgeRank || null,
-      citizen_record_number: person.citizenRecordNumber || null,
+      avatar_url: person.avatarUrl || null,  // 🔥 FIXED: avatarUrl -> avatar_url
+      pledge_rank: person.pledgeRank || null,  // 🔥 FIXED: pledgeRank -> pledge_rank
+      citizen_record_number: person.citizenRecordNumber || null,  // 🔥 FIXED: citizenRecordNumber -> citizen_record_number
       note: person.note || null,
       bio: person.bio || null,
-      last_scanned: person.lastScanned || null,
-      danger_level: 'unknown',
+      last_scanned: person.lastScanned || null,  // 🔥 FIXED: lastScanned -> last_scanned
+      // Default assessment values
+      classification: 'harmless',
+      danger_level: 1,
+      status: 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -337,8 +474,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setPersons(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Person', error);
     }
@@ -346,18 +485,37 @@ export const DataProvider = ({ children }) => {
 
   const updatePerson = async (id, updates) => {
     checkConnection();
-    
+
     try {
+      // 🔥 FIXED FIELD MAPPING FOR UPDATES
+      const mappedUpdates = {
+        name: updates.name,
+        handle: updates.handle,
+        aliases: updates.aliases,
+        enlist_date: updates.enlistDate || updates.enlist_date,  // 🔥 FIXED
+        location: updates.location,
+        language: updates.language,
+        avatar_url: updates.avatarUrl || updates.avatar_url,  // 🔥 FIXED
+        pledge_rank: updates.pledgeRank || updates.pledge_rank,  // 🔥 FIXED
+        citizen_record_number: updates.citizenRecordNumber || updates.citizen_record_number,  // 🔥 FIXED
+        note: updates.note,
+        bio: updates.bio,
+        last_scanned: updates.lastScanned || updates.last_scanned,  // 🔥 FIXED
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('persons_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(mappedUpdates)
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setPersons(prev => prev.map(person => person.id === id ? data : person));
       return data;
+
     } catch (error) {
       handleDbError('Update Person', error);
     }
@@ -366,7 +524,7 @@ export const DataProvider = ({ children }) => {
   // JOURNAL CRUD OPERATIONS
   const addJournal = async (journal) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       organization_id: journal.organizationId,
@@ -385,8 +543,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setJournals(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Journal', error);
     }
@@ -394,27 +554,32 @@ export const DataProvider = ({ children }) => {
 
   const updateJournal = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('journals_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setJournals(prev => prev.map(journal => journal.id === id ? data : journal));
       return data;
+
     } catch (error) {
       handleDbError('Update Journal', error);
     }
   };
 
-  // PERSON ENTRY CRUD OPERATIONS
+  // 🔥 PERSON ENTRY CRUD WITH COMPLETE FIELD MAPPING
   const addPersonEntry = async (entry) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       person_id: entry.personId,
@@ -422,7 +587,10 @@ export const DataProvider = ({ children }) => {
       date: entry.date,
       description: entry.description,
       crime_types: entry.crimeTypes || [],
-      danger_level: 'low',
+      // Default assessment values
+      classification: 'harmless',
+      danger_level: 1,
+      status: 'pending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -435,8 +603,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setPersonEntries(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Person Entry', error);
     }
@@ -444,18 +614,23 @@ export const DataProvider = ({ children }) => {
 
   const updatePersonEntry = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('person_entries_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setPersonEntries(prev => prev.map(entry => entry.id === id ? data : entry));
       return data;
+
     } catch (error) {
       handleDbError('Update Person Entry', error);
     }
@@ -464,7 +639,7 @@ export const DataProvider = ({ children }) => {
   // MEMBERSHIP CRUD OPERATIONS
   const addMembership = async (membership) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       person_id: membership.personId,
@@ -487,8 +662,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setMemberships(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Membership', error);
     }
@@ -496,18 +673,23 @@ export const DataProvider = ({ children }) => {
 
   const updateMembership = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('memberships_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setMemberships(prev => prev.map(membership => membership.id === id ? data : membership));
       return data;
+
     } catch (error) {
       handleDbError('Update Membership', error);
     }
@@ -516,7 +698,7 @@ export const DataProvider = ({ children }) => {
   // ORG RELATIONSHIPS CRUD OPERATIONS
   const addOrgRelationship = async (relationship) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       organization_id: relationship.organizationId,
@@ -537,8 +719,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setOrgRelationships(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Organization Relationship', error);
     }
@@ -546,18 +730,23 @@ export const DataProvider = ({ children }) => {
 
   const updateOrgRelationship = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('org_relationships_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setOrgRelationships(prev => prev.map(rel => rel.id === id ? data : rel));
       return data;
+
     } catch (error) {
       handleDbError('Update Organization Relationship', error);
     }
@@ -565,7 +754,7 @@ export const DataProvider = ({ children }) => {
 
   const removeOrgRelationship = async (id) => {
     checkConnection();
-    
+
     try {
       const { error } = await supabase
         .from('org_relationships_ms2024')
@@ -573,7 +762,9 @@ export const DataProvider = ({ children }) => {
         .eq('id', id);
 
       if (error) throw error;
+
       setOrgRelationships(prev => prev.filter(rel => rel.id !== id));
+
     } catch (error) {
       handleDbError('Remove Organization Relationship', error);
     }
@@ -582,7 +773,7 @@ export const DataProvider = ({ children }) => {
   // MANUFACTURER CRUD OPERATIONS
   const addManufacturer = async (manufacturer) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       name: manufacturer.name,
@@ -600,8 +791,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setManufacturers(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Manufacturer', error);
     }
@@ -609,18 +802,23 @@ export const DataProvider = ({ children }) => {
 
   const updateManufacturer = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('manufacturers_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setManufacturers(prev => prev.map(mfr => mfr.id === id ? data : mfr));
       return data;
+
     } catch (error) {
       handleDbError('Update Manufacturer', error);
     }
@@ -628,19 +826,21 @@ export const DataProvider = ({ children }) => {
 
   const deleteManufacturer = async (id) => {
     checkConnection();
-    
+
     try {
       // Delete related ship models first
       await supabase.from('ship_models_ms2024').delete().eq('manufacturer_id', id);
-      
+
       const { error } = await supabase
         .from('manufacturers_ms2024')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+
       setManufacturers(prev => prev.filter(mfr => mfr.id !== id));
       setShipModels(prev => prev.filter(model => model.manufacturer_id !== id));
+
     } catch (error) {
       handleDbError('Delete Manufacturer', error);
     }
@@ -649,7 +849,7 @@ export const DataProvider = ({ children }) => {
   // SHIP MODEL CRUD OPERATIONS
   const addShipModel = async (model) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       name: model.name,
@@ -669,8 +869,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setShipModels(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Ship Model', error);
     }
@@ -678,18 +880,23 @@ export const DataProvider = ({ children }) => {
 
   const updateShipModel = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('ship_models_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setShipModels(prev => prev.map(model => model.id === id ? data : model));
       return data;
+
     } catch (error) {
       handleDbError('Update Ship Model', error);
     }
@@ -697,7 +904,7 @@ export const DataProvider = ({ children }) => {
 
   const deleteShipModel = async (id) => {
     checkConnection();
-    
+
     try {
       const { error } = await supabase
         .from('ship_models_ms2024')
@@ -705,7 +912,9 @@ export const DataProvider = ({ children }) => {
         .eq('id', id);
 
       if (error) throw error;
+
       setShipModels(prev => prev.filter(model => model.id !== id));
+
     } catch (error) {
       handleDbError('Delete Ship Model', error);
     }
@@ -714,7 +923,7 @@ export const DataProvider = ({ children }) => {
   // SHIP CRUD OPERATIONS
   const addShip = async (ship) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       name: ship.name,
@@ -737,8 +946,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setShips(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Ship', error);
     }
@@ -746,18 +957,23 @@ export const DataProvider = ({ children }) => {
 
   const updateShip = async (id, updates) => {
     checkConnection();
-    
+
     try {
       const { data, error } = await supabase
         .from('ships_ms2024')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
       setShips(prev => prev.map(ship => ship.id === id ? data : ship));
       return data;
+
     } catch (error) {
       handleDbError('Update Ship', error);
     }
@@ -765,21 +981,23 @@ export const DataProvider = ({ children }) => {
 
   const deleteShip = async (id) => {
     checkConnection();
-    
+
     try {
       // Delete related assignments and journals first
       await supabase.from('ship_assignments_ms2024').delete().eq('ship_id', id);
       await supabase.from('ship_journals_ms2024').delete().eq('ship_id', id);
-      
+
       const { error } = await supabase
         .from('ships_ms2024')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+
       setShips(prev => prev.filter(ship => ship.id !== id));
       setShipAssignments(prev => prev.filter(assignment => assignment.ship_id !== id));
       setShipJournals(prev => prev.filter(journal => journal.ship_id !== id));
+
     } catch (error) {
       handleDbError('Delete Ship', error);
     }
@@ -788,7 +1006,7 @@ export const DataProvider = ({ children }) => {
   // SHIP ASSIGNMENT CRUD OPERATIONS
   const addShipAssignment = async (assignment) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       ship_id: assignment.shipId,
@@ -809,8 +1027,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setShipAssignments(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Ship Assignment', error);
     }
@@ -818,7 +1038,7 @@ export const DataProvider = ({ children }) => {
 
   const removeShipAssignment = async (id) => {
     checkConnection();
-    
+
     try {
       const { error } = await supabase
         .from('ship_assignments_ms2024')
@@ -826,7 +1046,9 @@ export const DataProvider = ({ children }) => {
         .eq('id', id);
 
       if (error) throw error;
+
       setShipAssignments(prev => prev.filter(assignment => assignment.id !== id));
+
     } catch (error) {
       handleDbError('Remove Ship Assignment', error);
     }
@@ -835,7 +1057,7 @@ export const DataProvider = ({ children }) => {
   // SHIP JOURNAL CRUD OPERATIONS
   const addShipJournal = async (journal) => {
     checkConnection();
-    
+
     const record = {
       id: crypto.randomUUID(),
       ship_id: journal.shipId,
@@ -854,8 +1076,10 @@ export const DataProvider = ({ children }) => {
         .single();
 
       if (error) throw error;
+
       setShipJournals(prev => [data, ...prev]);
       return data;
+
     } catch (error) {
       handleDbError('Add Ship Journal', error);
     }
@@ -1025,6 +1249,8 @@ export const DataProvider = ({ children }) => {
     dbConnected,
     connectionError,
     retryConnection,
+    enablePolling,
+    setEnablePolling,
 
     // Data
     organizations,
@@ -1045,6 +1271,7 @@ export const DataProvider = ({ children }) => {
 
     // Assessment functions
     updateAssessment,
+    updateStatus,
     getAssessmentHistory,
 
     // CRUD operations

@@ -3,11 +3,13 @@ import { motion } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 
-const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle } = FiIcons;
+const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle, FiSettings } = FiIcons;
 
 const DatabaseStatus = () => {
-  const { dbConnected, connectionError, loading, retryConnection } = useData();
+  const { dbConnected, connectionError, loading, retryConnection, enablePolling, setEnablePolling } = useData();
+  const { user, hasPermission } = useAuth();
 
   if (loading) {
     return (
@@ -55,15 +57,36 @@ const DatabaseStatus = () => {
     );
   }
 
+  // 🔥 ADMIN POLLING CONTROL
+  const isAdmin = user?.role === 'sentinel';
+
   return (
     <div className="fixed top-4 right-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2"
+        className="bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg"
       >
-        <SafeIcon icon={FiWifi} className="w-4 h-4" />
-        <span className="text-sm font-medium">Database Connected</span>
+        <div className="flex items-center space-x-2">
+          <SafeIcon icon={FiWifi} className="w-4 h-4" />
+          <span className="text-sm font-medium">Database Connected</span>
+          
+          {/* 🔥 ADMIN POLLING TOGGLE */}
+          {isAdmin && (
+            <div className="flex items-center space-x-1 ml-3 pl-2 border-l border-green-400">
+              <SafeIcon icon={FiSettings} className="w-3 h-3" />
+              <label className="flex items-center space-x-1">
+                <input
+                  type="checkbox"
+                  checked={enablePolling}
+                  onChange={(e) => setEnablePolling(e.target.checked)}
+                  className="w-3 h-3 rounded"
+                />
+                <span className="text-xs">Auto-refresh</span>
+              </label>
+            </div>
+          )}
+        </div>
       </motion.div>
     </div>
   );

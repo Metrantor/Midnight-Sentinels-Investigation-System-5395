@@ -1,48 +1,48 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useForm } from 'react-hook-form';
+import React,{useState} from 'react';
+import {motion,AnimatePresence} from 'framer-motion';
+import {useForm} from 'react-hook-form';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import Layout from '../components/Layout';
 import AssessmentPanel from '../components/AssessmentPanel';
-import { useData } from '../contexts/DataContext';
+import {useData} from '../contexts/DataContext';
 import PersonDetailModal from '../components/PersonDetailModal';
 
-const { FiPlus, FiUsers, FiEdit3, FiFileText, FiX, FiUser } = FiIcons;
+const {FiPlus,FiUsers,FiFileText,FiX,FiUser}=FiIcons;
 
-const PersonsPage = () => {
-  const { 
-    persons, 
-    personEntries, 
-    addPerson, 
-    updatePerson, 
-    addPersonEntry, 
-    updatePersonEntry, 
-    hasPersonCommittedCrimes, 
+const PersonsPage=()=> {
+  const {
+    persons,
+    personEntries,
+    addPerson,
+    updatePerson,
+    addPersonEntry,
+    updatePersonEntry,
+    hasPersonCommittedCrimes,
     CRIME_TYPES,
-    getCleanFormData 
-  } = useData();
+    getCleanFormData
+  }=useData();
+  
+  const [showForm,setShowForm]=useState(false);
+  const [editingPerson,setEditingPerson]=useState(null);
+  const [showEntryForm,setShowEntryForm]=useState(false);
+  const [editingEntry,setEditingEntry]=useState(null);
+  const [selectedPerson,setSelectedPerson]=useState(null);
+  const [showDetailModal,setShowDetailModal]=useState(false);
 
-  const [showForm, setShowForm] = useState(false);
-  const [editingPerson, setEditingPerson] = useState(null);
-  const [showEntryForm, setShowEntryForm] = useState(false);
-  const [editingEntry, setEditingEntry] = useState(null);
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  const {register,handleSubmit,reset,formState: {errors}}=useForm();
+  const {
+    register: registerEntry,
+    handleSubmit: handleEntrySubmit,
+    reset: resetEntry,
+    formState: {errors: entryErrors}
+  }=useForm();
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm();
-  const { 
-    register: registerEntry, 
-    handleSubmit: handleEntrySubmit, 
-    reset: resetEntry, 
-    formState: { errors: entryErrors } 
-  } = useForm();
-
-  const onSubmitPerson = async (data) => {
+  const onSubmitPerson=async (data)=> {
     try {
-      const aliases = data.aliases ? data.aliases.split(',').map(alias => alias.trim()).filter(Boolean) : [];
+      const aliases=data.aliases ? data.aliases.split(',').map(alias=> alias.trim()).filter(Boolean) : [];
       
-      const personData = {
+      const personData={
         name: data.name,
         handle: data.handle,
         aliases,
@@ -58,7 +58,7 @@ const PersonsPage = () => {
       };
 
       if (editingPerson) {
-        await updatePerson(editingPerson.id, personData);
+        await updatePerson(editingPerson.id,personData);
         setEditingPerson(null);
       } else {
         await addPerson(personData);
@@ -67,22 +67,22 @@ const PersonsPage = () => {
       reset(getCleanFormData('person'));
       setShowForm(false);
     } catch (error) {
-      console.error('Error saving person:', error);
+      console.error('Error saving person:',error);
       alert('Error saving person: ' + error.message);
     }
   };
 
-  const onSubmitEntry = async (data) => {
+  const onSubmitEntry=async (data)=> {
     try {
-      const entryData = {
+      const entryData={
         ...data,
         personId: selectedPerson.id,
         personName: selectedPerson.name,
-        crimeTypes: data.crimeTypes ? Object.keys(data.crimeTypes).filter(key => data.crimeTypes[key]) : []
+        crimeTypes: data.crimeTypes ? Object.keys(data.crimeTypes).filter(key=> data.crimeTypes[key]) : []
       };
 
       if (editingEntry) {
-        await updatePersonEntry(editingEntry.id, entryData);
+        await updatePersonEntry(editingEntry.id,entryData);
         setEditingEntry(null);
       } else {
         await addPersonEntry(entryData);
@@ -91,40 +91,50 @@ const PersonsPage = () => {
       resetEntry();
       setShowEntryForm(false);
     } catch (error) {
-      console.error('Error saving entry:', error);
+      console.error('Error saving entry:',error);
       alert('Error saving entry: ' + error.message);
     }
   };
 
-  const startEditPerson = (person) => {
+  // 🎯 FIXED: Separate handlers with proper event stopping
+  const handleEditPerson=(e,person)=> {
+    e.preventDefault();
+    e.stopPropagation();
     setEditingPerson(person);
-    const formData = {
+    const formData={
       ...person,
-      aliases: person.aliases ? person.aliases.join(', ') : ''
+      aliases: person.aliases ? person.aliases.join(',') : ''
     };
     reset(formData);
     setShowForm(true);
   };
 
-  const startEditEntry = (entry) => {
+  const handleAddEntry=(e,person)=> {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedPerson(person);
+    setShowEntryForm(true);
+  };
+
+  const handleOpenDetail=(person)=> {
+    setSelectedPerson(person);
+    setShowDetailModal(true);
+  };
+
+  const startEditEntry=(entry)=> {
     setEditingEntry(entry);
-    const formData = { ...entry };
+    const formData={...entry};
     if (entry.crime_types) {
-      entry.crime_types.forEach(crimeType => {
-        formData[`crimeTypes.${crimeType}`] = true;
+      entry.crime_types.forEach(crimeType=> {
+        formData[`crimeTypes.${crimeType}`]=true;
       });
     }
     resetEntry(formData);
     setShowEntryForm(true);
   };
 
-  const openPersonDetail = (person) => {
-    setSelectedPerson(person);
-    setShowDetailModal(true);
-  };
-
-  const getPersonEntries = (personId) => {
-    return personEntries.filter(e => e.person_id === personId);
+  const getPersonEntries=(personId)=> {
+    return personEntries.filter(e=> e.person_id===personId);
   };
 
   return (
@@ -138,9 +148,9 @@ const PersonsPage = () => {
             </h3>
           </div>
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => setShowForm(true)}
+            whileHover={{scale: 1.05}}
+            whileTap={{scale: 0.95}}
+            onClick={()=> setShowForm(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
           >
             <SafeIcon icon={FiPlus} className="w-4 h-4" />
@@ -150,77 +160,81 @@ const PersonsPage = () => {
 
         {/* Persons Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {persons.map((person) => {
-            const hasCrimes = hasPersonCommittedCrimes(person.id);
+          {persons.map((person)=> {
+            const hasCrimes=hasPersonCommittedCrimes(person.id);
+            
             return (
               <motion.div
                 key={person.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={`bg-midnight-900 rounded-xl p-6 border transition-all cursor-pointer hover:scale-105 ${
-                  hasCrimes ? 'border-red-500/50 bg-red-900/10' : 'border-midnight-700'
+                initial={{opacity: 0,scale: 0.95}}
+                animate={{opacity: 1,scale: 1}}
+                className={`bg-midnight-900 rounded-xl p-6 border transition-all ${
+                  hasCrimes 
+                    ? 'border-red-500/50 bg-red-900/10' 
+                    : 'border-midnight-700'
                 }`}
-                onClick={() => openPersonDetail(person)}
               >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    {person.avatar_url ? (
-                      <img
-                        src={person.avatar_url}
-                        alt={person.name}
-                        className="w-12 h-12 rounded-lg object-cover"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    <div className={`bg-red-600 rounded-lg p-2 ${person.avatar_url ? 'hidden' : 'flex'}`}>
-                      <SafeIcon icon={FiUser} className="w-6 h-6 text-white" />
+                {/* 🎯 FIXED: Separate click areas */}
+                <div 
+                  onClick={()=> handleOpenDetail(person)}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      {person.avatar_url ? (
+                        <img
+                          src={person.avatar_url}
+                          alt={person.name}
+                          className="w-12 h-12 rounded-lg object-cover"
+                          onError={(e)=> {
+                            e.target.style.display='none';
+                            e.target.nextSibling.style.display='flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className={`bg-red-600 rounded-lg p-2 ${person.avatar_url ? 'hidden' : 'flex'}`}>
+                        <SafeIcon icon={FiUser} className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-white">{person.name}</h4>
+                        <p className="text-midnight-400 text-sm">@{person.handle}</p>
+                        {person.pledge_rank && (
+                          <p className="text-midnight-500 text-xs">{person.pledge_rank}</p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-lg font-semibold text-white">{person.name}</h4>
-                      <p className="text-midnight-400 text-sm">@{person.handle}</p>
-                      {person.pledge_rank && (
-                        <p className="text-midnight-500 text-xs">{person.pledge_rank}</p>
-                      )}
-                    </div>
+                    
+                    {/* 🎯 FIXED: Separate button area */}
+                    <button
+                      onClick={(e)=> handleEditPerson(e,person)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors"
+                    >
+                      Edit Person
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startEditPerson(person);
-                    }}
-                    className="text-midnight-400 hover:text-white transition-colors"
-                  >
-                    <SafeIcon icon={FiEdit3} className="w-4 h-4" />
-                  </button>
+
+                  {/* Aliases */}
+                  {person.aliases && person.aliases.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-midnight-400 text-xs mb-1">Aliases:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {person.aliases.map((alias,index)=> (
+                          <span key={index} className="bg-midnight-800 text-midnight-300 px-2 py-1 rounded text-xs">
+                            {alias}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location */}
+                  {person.location && (
+                    <div className="mb-3">
+                      <p className="text-midnight-400 text-xs mb-1">Location:</p>
+                      <p className="text-midnight-300 text-sm">{person.location}</p>
+                    </div>
+                  )}
                 </div>
-
-                {/* Aliases */}
-                {person.aliases && person.aliases.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-midnight-400 text-xs mb-1">Aliases:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {person.aliases.map((alias, index) => (
-                        <span
-                          key={index}
-                          className="bg-midnight-800 text-midnight-300 px-2 py-1 rounded text-xs"
-                        >
-                          {alias}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Location */}
-                {person.location && (
-                  <div className="mb-3">
-                    <p className="text-midnight-400 text-xs mb-1">Location:</p>
-                    <p className="text-midnight-300 text-sm">{person.location}</p>
-                  </div>
-                )}
 
                 {/* Assessment Panel */}
                 <AssessmentPanel
@@ -241,12 +255,10 @@ const PersonsPage = () => {
                       </span>
                     )}
                   </div>
+                  
+                  {/* 🎯 FIXED: Separate button */}
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedPerson(person);
-                      setShowEntryForm(true);
-                    }}
+                    onClick={(e)=> handleAddEntry(e,person)}
                     className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm flex items-center space-x-1 transition-colors"
                   >
                     <SafeIcon icon={FiFileText} className="w-3 h-3" />
@@ -258,7 +270,7 @@ const PersonsPage = () => {
           })}
         </div>
 
-        {persons.length === 0 && (
+        {persons.length===0 && (
           <div className="text-center py-12">
             <SafeIcon icon={FiUsers} className="w-16 h-16 text-midnight-600 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-midnight-400 mb-2">No persons recorded</h3>
@@ -271,15 +283,15 @@ const PersonsPage = () => {
       <AnimatePresence>
         {showForm && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            exit={{opacity: 0}}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{scale: 0.95,opacity: 0}}
+              animate={{scale: 1,opacity: 1}}
+              exit={{scale: 0.95,opacity: 0}}
               className="bg-midnight-900 rounded-xl p-6 w-full max-w-4xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-4">
@@ -287,7 +299,7 @@ const PersonsPage = () => {
                   {editingPerson ? 'Edit Person' : 'Add Person'}
                 </h3>
                 <button
-                  onClick={() => {
+                  onClick={()=> {
                     setShowForm(false);
                     setEditingPerson(null);
                     reset(getCleanFormData('person'));
@@ -305,7 +317,7 @@ const PersonsPage = () => {
                       Name *
                     </label>
                     <input
-                      {...register('name', { required: 'Name is required' })}
+                      {...register('name',{required: 'Name is required'})}
                       className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter full name"
                     />
@@ -319,7 +331,7 @@ const PersonsPage = () => {
                       Handle *
                     </label>
                     <input
-                      {...register('handle', { required: 'Handle is required' })}
+                      {...register('handle',{required: 'Handle is required'})}
                       className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Enter handle/username"
                     />
@@ -445,7 +457,7 @@ const PersonsPage = () => {
                 <div className="flex space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={()=> {
                       setShowForm(false);
                       setEditingPerson(null);
                       reset(getCleanFormData('person'));
@@ -471,15 +483,15 @@ const PersonsPage = () => {
       <AnimatePresence>
         {showEntryForm && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            exit={{opacity: 0}}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{scale: 0.95,opacity: 0}}
+              animate={{scale: 1,opacity: 1}}
+              exit={{scale: 0.95,opacity: 0}}
               className="bg-midnight-900 rounded-xl p-6 w-full max-w-2xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-4">
@@ -487,7 +499,7 @@ const PersonsPage = () => {
                   {editingEntry ? 'Edit Person Entry' : 'Add Person Entry'}
                 </h3>
                 <button
-                  onClick={() => {
+                  onClick={()=> {
                     setShowEntryForm(false);
                     setEditingEntry(null);
                     setSelectedPerson(null);
@@ -524,7 +536,7 @@ const PersonsPage = () => {
                     Date
                   </label>
                   <input
-                    {...registerEntry('date', { required: 'Date is required' })}
+                    {...registerEntry('date',{required: 'Date is required'})}
                     type="date"
                     className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
@@ -538,7 +550,7 @@ const PersonsPage = () => {
                     Crime Types
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {CRIME_TYPES.map((crimeType) => (
+                    {CRIME_TYPES.map((crimeType)=> (
                       <label key={crimeType.id} className="flex items-center space-x-2">
                         <input
                           {...registerEntry(`crimeTypes.${crimeType.id}`)}
@@ -556,7 +568,7 @@ const PersonsPage = () => {
                     Description
                   </label>
                   <textarea
-                    {...registerEntry('description', { required: 'Description is required' })}
+                    {...registerEntry('description',{required: 'Description is required'})}
                     rows={4}
                     className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter detailed description of the activity"
@@ -569,7 +581,7 @@ const PersonsPage = () => {
                 <div className="flex space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={()=> {
                       setShowEntryForm(false);
                       setEditingEntry(null);
                       setSelectedPerson(null);
@@ -596,13 +608,13 @@ const PersonsPage = () => {
       <PersonDetailModal
         person={selectedPerson}
         isOpen={showDetailModal}
-        onClose={() => {
+        onClose={()=> {
           setShowDetailModal(false);
           setSelectedPerson(null);
         }}
-        onEdit={(person) => {
+        onEdit={(person)=> {
           setShowDetailModal(false);
-          startEditPerson(person);
+          handleEditPerson({preventDefault: ()=> {},stopPropagation: ()=> {}},person);
         }}
       />
     </Layout>

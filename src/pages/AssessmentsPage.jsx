@@ -1,42 +1,37 @@
-import React,{useState,useMemo} from 'react';
-import {motion,AnimatePresence} from 'framer-motion';
-import {useNavigate} from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import Layout from '../components/Layout';
 import AssessmentPanel from '../components/AssessmentPanel';
-import {useData} from '../contexts/DataContext';
-import {useAuth} from '../contexts/AuthContext';
+import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 
-const {FiShield,FiUser,FiBuilding,FiFileText,FiAlertTriangle,FiFilter,FiEye,FiCalendar}=FiIcons;
+const { FiShield, FiUser, FiBuilding, FiFileText, FiAlertTriangle, FiFilter, FiEye, FiCalendar } = FiIcons;
 
-const AssessmentsPage=()=> {
-  const navigate=useNavigate();
-  const {
-    persons,
-    organizations,
-    personEntries,
-    CRIME_TYPES,
-    DANGER_LEVELS
-  }=useData();
-  const {hasPermission,DANGER_LEVELS: AUTH_DANGER_LEVELS}=useAuth();
-  const [filterLevel,setFilterLevel]=useState('all');
-  const [filterType,setFilterType]=useState('all');
-  const [showUnassessed,setShowUnassessed]=useState(true);
+const AssessmentsPage = () => {
+  const navigate = useNavigate();
+  const { persons, organizations, personEntries, CRIME_TYPES, DANGER_LEVELS } = useData();
+  const { hasPermission, DANGER_LEVELS: AUTH_DANGER_LEVELS } = useAuth();
+
+  const [filterLevel, setFilterLevel] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [showUnassessed, setShowUnassessed] = useState(true);
 
   // Combine all assessable items
-  const assessmentItems=useMemo(()=> {
-    const items=[];
+  const assessmentItems = useMemo(() => {
+    const items = [];
 
     // Add persons
-    persons.forEach(person=> {
+    persons.forEach(person => {
       items.push({
         id: person.id,
         type: 'person',
         name: person.name,
         handle: person.handle,
         avatar: person.avatar_url,
-        dangerLevel: person.danger_level || 'unknown',
+        dangerLevel: person.danger_level || 1, // 🔥 FIXED: Use number instead of 'unknown'
         assessedBy: person.assessed_by_name,
         assessedAt: person.assessed_at,
         assessmentNotes: person.assessment_notes,
@@ -45,14 +40,14 @@ const AssessmentsPage=()=> {
     });
 
     // Add organizations
-    organizations.forEach(org=> {
+    organizations.forEach(org => {
       items.push({
         id: org.id,
         type: 'organization',
         name: org.name,
         handle: org.handle,
         avatar: org.logo_url,
-        dangerLevel: org.danger_level || 'unknown',
+        dangerLevel: org.danger_level || 1, // 🔥 FIXED: Use number instead of 'unknown'
         assessedBy: org.assessed_by_name,
         assessedAt: org.assessed_at,
         assessmentNotes: org.assessment_notes,
@@ -61,14 +56,15 @@ const AssessmentsPage=()=> {
     });
 
     // Add person entries
-    personEntries.forEach(entry=> {
+    personEntries.forEach(entry => {
+      const person = persons.find(p => p.id === entry.person_id);
       items.push({
         id: entry.id,
         type: 'entry',
         name: `Entry: ${entry.person_name}`,
         handle: entry.person_name,
-        avatar: null,
-        dangerLevel: entry.danger_level || 'unknown',
+        avatar: person?.avatar_url || null, // 🔥 FIXED: Show person avatar for entries
+        dangerLevel: entry.danger_level || 1, // 🔥 FIXED: Use number instead of 'unknown'
         assessedBy: entry.assessed_by_name,
         assessedAt: entry.assessed_at,
         assessmentNotes: entry.assessment_notes,
@@ -80,30 +76,34 @@ const AssessmentsPage=()=> {
     });
 
     return items;
-  },[persons,organizations,personEntries]);
+  }, [persons, organizations, personEntries]);
 
   // Filter items
-  const filteredItems=useMemo(()=> {
-    return assessmentItems.filter(item=> {
+  const filteredItems = useMemo(() => {
+    return assessmentItems.filter(item => {
       // Filter by assessment status
       if (showUnassessed && item.assessedBy) return false;
       if (!showUnassessed && !item.assessedBy) return false;
 
-      // Filter by danger level
-      if (filterLevel !== 'all' && item.dangerLevel !== filterLevel) return false;
+      // 🔥 FIXED: Filter by danger level - show all items >= selected level
+      if (filterLevel !== 'all') {
+        const selectedLevel = parseInt(filterLevel);
+        const itemLevel = parseInt(item.dangerLevel);
+        if (itemLevel < selectedLevel) return false;
+      }
 
       // Filter by type
       if (filterType !== 'all' && item.type !== filterType) return false;
 
       return true;
     });
-  },[assessmentItems,filterLevel,filterType,showUnassessed]);
+  }, [assessmentItems, filterLevel, filterType, showUnassessed]);
 
-  const getDangerLevelInfo=(level)=> {
-    return AUTH_DANGER_LEVELS.find(dl=> dl.id===level) || AUTH_DANGER_LEVELS[0];
+  const getDangerLevelInfo = (level) => {
+    return AUTH_DANGER_LEVELS.find(dl => dl.level === parseInt(level)) || AUTH_DANGER_LEVELS[0];
   };
 
-  const getTypeIcon=(type)=> {
+  const getTypeIcon = (type) => {
     switch (type) {
       case 'person': return FiUser;
       case 'organization': return FiBuilding;
@@ -112,7 +112,7 @@ const AssessmentsPage=()=> {
     }
   };
 
-  const getTypeColor=(type)=> {
+  const getTypeColor = (type) => {
     switch (type) {
       case 'person': return 'bg-red-600';
       case 'organization': return 'bg-blue-600';
@@ -121,7 +121,7 @@ const AssessmentsPage=()=> {
     }
   };
 
-  const navigateToItem=(item)=> {
+  const navigateToItem = (item) => {
     switch (item.type) {
       case 'person':
         navigate('/persons');
@@ -137,9 +137,9 @@ const AssessmentsPage=()=> {
     }
   };
 
-  const stats={
-    unassessed: assessmentItems.filter(item=> !item.assessedBy).length,
-    high: assessmentItems.filter(item=> ['high','extreme','critical'].includes(item.dangerLevel)).length,
+  const stats = {
+    unassessed: assessmentItems.filter(item => !item.assessedBy).length,
+    high: assessmentItems.filter(item => parseInt(item.dangerLevel) >= 5).length, // 🔥 FIXED: Use numeric comparison
     total: assessmentItems.length
   };
 
@@ -179,7 +179,7 @@ const AssessmentsPage=()=> {
               </div>
               <div>
                 <p className="text-2xl font-bold text-white">{stats.high}</p>
-                <p className="text-midnight-400 text-sm">High Risk+</p>
+                <p className="text-midnight-400 text-sm">High Risk (5+)</p>
               </div>
             </div>
           </div>
@@ -207,20 +207,20 @@ const AssessmentsPage=()=> {
 
             <div className="flex items-center space-x-2">
               <button
-                onClick={()=> setShowUnassessed(true)}
+                onClick={() => setShowUnassessed(true)}
                 className={`px-3 py-1 rounded text-sm transition-colors ${
-                  showUnassessed
-                    ? 'bg-yellow-600 text-white'
+                  showUnassessed 
+                    ? 'bg-yellow-600 text-white' 
                     : 'bg-midnight-800 text-midnight-400 hover:text-white'
                 }`}
               >
                 Unassessed
               </button>
               <button
-                onClick={()=> setShowUnassessed(false)}
+                onClick={() => setShowUnassessed(false)}
                 className={`px-3 py-1 rounded text-sm transition-colors ${
-                  !showUnassessed
-                    ? 'bg-blue-600 text-white'
+                  !showUnassessed 
+                    ? 'bg-blue-600 text-white' 
                     : 'bg-midnight-800 text-midnight-400 hover:text-white'
                 }`}
               >
@@ -230,7 +230,7 @@ const AssessmentsPage=()=> {
 
             <select
               value={filterType}
-              onChange={(e)=> setFilterType(e.target.value)}
+              onChange={(e) => setFilterType(e.target.value)}
               className="px-3 py-1 bg-midnight-800 border border-midnight-600 rounded text-white text-sm"
             >
               <option value="all">All Types</option>
@@ -241,40 +241,44 @@ const AssessmentsPage=()=> {
 
             <select
               value={filterLevel}
-              onChange={(e)=> setFilterLevel(e.target.value)}
+              onChange={(e) => setFilterLevel(e.target.value)}
               className="px-3 py-1 bg-midnight-800 border border-midnight-600 rounded text-white text-sm"
             >
               <option value="all">All Levels</option>
-              {AUTH_DANGER_LEVELS.map(level=> (
-                <option key={level.id} value={level.id}>{level.name}</option>
-              ))}
+              <option value="1">Level 1+</option>
+              <option value="2">Level 2+</option>
+              <option value="3">Level 3+</option>
+              <option value="4">Level 4+</option>
+              <option value="5">Level 5+</option>
+              <option value="6">Level 6 Only</option>
             </select>
           </div>
         </div>
 
         {/* Assessment Items */}
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredItems.map((item)=> {
-            const dangerInfo=getDangerLevelInfo(item.dangerLevel);
-            const TypeIcon=getTypeIcon(item.type);
-            
+          {filteredItems.map((item) => {
+            const dangerInfo = getDangerLevelInfo(item.dangerLevel);
+            const TypeIcon = getTypeIcon(item.type);
+
             return (
               <motion.div
                 key={`${item.type}-${item.id}`}
-                initial={{opacity: 0,scale: 0.95}}
-                animate={{opacity: 1,scale: 1}}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
                 className="bg-midnight-900 rounded-xl p-6 border border-midnight-700"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
+                    {/* 🔥 FIXED: Show actual avatar instead of just icons */}
                     {item.avatar ? (
                       <img
                         src={item.avatar}
                         alt={item.name}
                         className="w-12 h-12 rounded-lg object-cover"
-                        onError={(e)=> {
-                          e.target.style.display='none';
-                          e.target.nextSibling.style.display='flex';
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
                         }}
                       />
                     ) : null}
@@ -296,7 +300,7 @@ const AssessmentsPage=()=> {
                     </div>
                   </div>
                   <button
-                    onClick={()=> navigateToItem(item)}
+                    onClick={() => navigateToItem(item)}
                     className="text-midnight-400 hover:text-white transition-colors"
                     title="View Details"
                   >
@@ -315,8 +319,8 @@ const AssessmentsPage=()=> {
                     </div>
                     {item.crimeTypes && item.crimeTypes.length > 0 && (
                       <div className="flex flex-wrap gap-1">
-                        {item.crimeTypes.map(crimeType=> {
-                          const crimeInfo=CRIME_TYPES.find(ct=> ct.id===crimeType);
+                        {item.crimeTypes.map(crimeType => {
+                          const crimeInfo = CRIME_TYPES.find(ct => ct.id === crimeType);
                           return (
                             <span
                               key={crimeType}
@@ -339,7 +343,7 @@ const AssessmentsPage=()=> {
                   targetType={item.type}
                   targetId={item.id}
                   currentAssessment={item.data}
-                  onAssessmentUpdate={()=> window.location.reload()}
+                  onAssessmentUpdate={() => window.location.reload()}
                 />
               </motion.div>
             );
