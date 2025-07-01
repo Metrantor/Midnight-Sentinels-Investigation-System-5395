@@ -1,27 +1,27 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import React,{useState} from 'react';
+import {motion,AnimatePresence} from 'framer-motion';
+import {useNavigate} from 'react-router-dom';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
-import { useData } from '../contexts/DataContext';
+import AssessmentPanel from './AssessmentPanel';
+import {useData} from '../contexts/DataContext';
 
-const { FiX, FiEdit3, FiUser, FiCalendar, FiMapPin, FiGlobe, FiAward, FiFileText, FiBook, FiPlus, FiCheck, FiXCircle, FiExternalLink } = FiIcons;
+const {FiX,FiEdit3,FiUser,FiCalendar,FiMapPin,FiGlobe,FiAward,FiFileText,FiBook,FiPlus,FiCheck,FiXCircle,FiExternalLink}=FiIcons;
 
-const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
-  const navigate = useNavigate();
-  const { 
-    personEntries, 
-    organizations, 
-    memberships, 
-    getPersonCrimeStats, 
-    getPersonMemberships, 
-    addMembership, 
-    updateMembership, 
-    CRIME_TYPES 
-  } = useData();
-  
-  const [showMembershipForm, setShowMembershipForm] = useState(false);
-  const [newMembership, setNewMembership] = useState({
+const PersonDetailModal=({person,isOpen,onClose,onEdit})=> {
+  const navigate=useNavigate();
+  const {
+    personEntries,
+    organizations,
+    memberships,
+    getPersonCrimeStats,
+    getPersonMemberships,
+    addMembership,
+    updateMembership,
+    CRIME_TYPES
+  }=useData();
+  const [showMembershipForm,setShowMembershipForm]=useState(false);
+  const [newMembership,setNewMembership]=useState({
     organizationId: '',
     startDate: '',
     endDate: '',
@@ -31,13 +31,13 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
 
   if (!person || !isOpen) return null;
 
-  const entries = personEntries.filter(e => e.personId === person.id);
-  const crimeStats = getPersonCrimeStats(person.id);
-  const personMemberships = getPersonMemberships(person.id);
+  const entries=personEntries.filter(e=> e.person_id===person.id);
+  const crimeStats=getPersonCrimeStats(person.id);
+  const personMemberships=getPersonMemberships(person.id);
 
-  const handleAddMembership = () => {
+  const handleAddMembership=()=> {
     if (newMembership.organizationId) {
-      const org = organizations.find(o => o.id === newMembership.organizationId);
+      const org=organizations.find(o=> o.id===newMembership.organizationId);
       addMembership({
         ...newMembership,
         personId: person.id,
@@ -54,8 +54,8 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
     }
   };
 
-  const toggleMembershipStatus = (membership) => {
-    updateMembership(membership.id, {
+  const toggleMembershipStatus=(membership)=> {
+    updateMembership(membership.id,{
       ...membership,
       isActive: !membership.isActive,
       endDate: !membership.isActive ? '' : new Date().toISOString().split('T')[0],
@@ -63,7 +63,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
     });
   };
 
-  const navigateToOrganization = (orgId) => {
+  const navigateToOrganization=(orgId)=> {
     onClose();
     navigate('/organizations');
     // You might want to add a way to highlight the specific organization
@@ -72,45 +72,45 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{opacity: 0}}
+        animate={{opacity: 1}}
+        exit={{opacity: 0}}
         className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
       >
         <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
+          initial={{scale: 0.95,opacity: 0}}
+          animate={{scale: 1,opacity: 1}}
+          exit={{scale: 0.95,opacity: 0}}
           className="bg-midnight-900 rounded-xl w-full max-w-4xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-midnight-700">
             <div className="flex items-center space-x-4">
-              {person.avatarUrl ? (
+              {person.avatar_url ? (
                 <img
-                  src={person.avatarUrl}
+                  src={person.avatar_url}
                   alt={person.name}
                   className="w-16 h-16 rounded-lg object-cover"
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
+                  onError={(e)=> {
+                    e.target.style.display='none';
+                    e.target.nextSibling.style.display='flex';
                   }}
                 />
               ) : null}
-              <div className={`bg-red-600 rounded-lg p-3 ${person.avatarUrl ? 'hidden' : 'flex'}`}>
+              <div className={`bg-red-600 rounded-lg p-3 ${person.avatar_url ? 'hidden' : 'flex'}`}>
                 <SafeIcon icon={FiUser} className="w-8 h-8 text-white" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-white">{person.name}</h2>
                 <p className="text-midnight-400">@{person.handle}</p>
-                {person.pledgeRank && (
-                  <p className="text-midnight-500 text-sm">{person.pledgeRank}</p>
+                {person.pledge_rank && (
+                  <p className="text-midnight-500 text-sm">{person.pledge_rank}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => onEdit(person)}
+                onClick={()=> onEdit(person)}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
               >
                 <SafeIcon icon={FiEdit3} className="w-4 h-4" />
@@ -126,17 +126,26 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
           </div>
 
           <div className="p-6 space-y-6">
+            {/* Assessment Panel */}
+            <AssessmentPanel
+              targetType="person"
+              targetId={person.id}
+              currentAssessment={person}
+              onAssessmentUpdate={()=> window.location.reload()}
+            />
+
             {/* Basic Info Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {person.enlistDate && (
+              {person.enlist_date && (
                 <div className="bg-midnight-800 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <SafeIcon icon={FiCalendar} className="w-4 h-4 text-blue-400" />
                     <span className="text-sm font-medium text-midnight-300">Enlist Date</span>
                   </div>
-                  <p className="text-white">{new Date(person.enlistDate).toLocaleDateString()}</p>
+                  <p className="text-white">{new Date(person.enlist_date).toLocaleDateString()}</p>
                 </div>
               )}
+
               {person.location && (
                 <div className="bg-midnight-800 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
@@ -146,6 +155,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                   <p className="text-white">{person.location}</p>
                 </div>
               )}
+
               {person.language && (
                 <div className="bg-midnight-800 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
@@ -155,22 +165,24 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                   <p className="text-white">{person.language}</p>
                 </div>
               )}
-              {person.citizenRecordNumber && (
+
+              {person.citizen_record_number && (
                 <div className="bg-midnight-800 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <SafeIcon icon={FiFileText} className="w-4 h-4 text-yellow-400" />
                     <span className="text-sm font-medium text-midnight-300">Citizen Record</span>
                   </div>
-                  <p className="text-white">{person.citizenRecordNumber}</p>
+                  <p className="text-white">{person.citizen_record_number}</p>
                 </div>
               )}
-              {person.lastScanned && (
+
+              {person.last_scanned && (
                 <div className="bg-midnight-800 rounded-lg p-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <SafeIcon icon={FiCalendar} className="w-4 h-4 text-red-400" />
                     <span className="text-sm font-medium text-midnight-300">Last Scanned</span>
                   </div>
-                  <p className="text-white">{new Date(person.lastScanned).toLocaleString()}</p>
+                  <p className="text-white">{new Date(person.last_scanned).toLocaleString()}</p>
                 </div>
               )}
             </div>
@@ -180,7 +192,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
               <div className="bg-midnight-800 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3">Aliases</h3>
                 <div className="flex flex-wrap gap-2">
-                  {person.aliases.map((alias, index) => (
+                  {person.aliases.map((alias,index)=> (
                     <span
                       key={index}
                       className="bg-midnight-700 text-midnight-300 px-3 py-1 rounded-full text-sm"
@@ -197,7 +209,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-semibold text-white">Organization Memberships</h3>
                 <button
-                  onClick={() => setShowMembershipForm(!showMembershipForm)}
+                  onClick={()=> setShowMembershipForm(!showMembershipForm)}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm flex items-center space-x-1"
                 >
                   <SafeIcon icon={FiPlus} className="w-3 h-3" />
@@ -210,33 +222,36 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <select
                       value={newMembership.organizationId}
-                      onChange={(e) => setNewMembership({ ...newMembership, organizationId: e.target.value })}
+                      onChange={(e)=> setNewMembership({...newMembership,organizationId: e.target.value})}
                       className="px-3 py-2 bg-midnight-800 border border-midnight-600 rounded text-white"
                     >
                       <option value="">Select Organization</option>
-                      {organizations.map(org => (
+                      {organizations.map(org=> (
                         <option key={org.id} value={org.id}>{org.name}</option>
                       ))}
                     </select>
+
                     <input
                       type="date"
                       value={newMembership.startDate}
-                      onChange={(e) => setNewMembership({ ...newMembership, startDate: e.target.value })}
+                      onChange={(e)=> setNewMembership({...newMembership,startDate: e.target.value})}
                       className="px-3 py-2 bg-midnight-800 border border-midnight-600 rounded text-white"
                       placeholder="Start Date"
                     />
+
                     <input
                       type="date"
                       value={newMembership.lastVerified}
-                      onChange={(e) => setNewMembership({ ...newMembership, lastVerified: e.target.value })}
+                      onChange={(e)=> setNewMembership({...newMembership,lastVerified: e.target.value})}
                       className="px-3 py-2 bg-midnight-800 border border-midnight-600 rounded text-white"
                       placeholder="Last Verified"
                     />
+
                     <label className="flex items-center space-x-2">
                       <input
                         type="checkbox"
                         checked={newMembership.isActive}
-                        onChange={(e) => setNewMembership({ ...newMembership, isActive: e.target.checked })}
+                        onChange={(e)=> setNewMembership({...newMembership,isActive: e.target.checked})}
                         className="rounded bg-midnight-800 border-midnight-600 text-blue-600 focus:ring-blue-500"
                       />
                       <span className="text-midnight-300 text-sm">Active</span>
@@ -250,7 +265,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                       Add Membership
                     </button>
                     <button
-                      onClick={() => setShowMembershipForm(false)}
+                      onClick={()=> setShowMembershipForm(false)}
                       className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
                     >
                       Cancel
@@ -260,14 +275,14 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
               )}
 
               <div className="space-y-3">
-                {personMemberships.map((membership) => {
-                  const org = organizations.find(o => o.id === membership.organizationId);
+                {personMemberships.map((membership)=> {
+                  const org=organizations.find(o=> o.id===membership.organizationId);
                   return (
                     <div
                       key={membership.id}
                       className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-                        membership.isActive 
-                          ? 'bg-midnight-700 border-midnight-600' 
+                        membership.isActive
+                          ? 'bg-midnight-700 border-midnight-600'
                           : 'bg-midnight-800/30 border-midnight-700/50 opacity-60'
                       }`}
                     >
@@ -289,7 +304,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                               {membership.organizationName}
                             </p>
                             <button
-                              onClick={() => navigateToOrganization(membership.organizationId)}
+                              onClick={()=> navigateToOrganization(membership.organizationId)}
                               className="text-blue-400 hover:text-blue-300 transition-colors"
                               title="Go to Organization"
                             >
@@ -309,10 +324,10 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                         <div className="flex items-center space-x-2">
                           <div className={`w-2 h-2 rounded-full ${membership.isActive ? 'bg-green-400' : 'bg-gray-400'}`}></div>
                           <button
-                            onClick={() => toggleMembershipStatus(membership)}
+                            onClick={()=> toggleMembershipStatus(membership)}
                             className={`p-1 rounded transition-colors ${
-                              membership.isActive 
-                                ? 'text-green-400 hover:bg-green-900/20' 
+                              membership.isActive
+                                ? 'text-green-400 hover:bg-green-900/20'
                                 : 'text-gray-400 hover:bg-gray-900/20'
                             }`}
                             title={membership.isActive ? 'Mark as Inactive' : 'Mark as Active'}
@@ -324,7 +339,7 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                     </div>
                   );
                 })}
-                {personMemberships.length === 0 && (
+                {personMemberships.length===0 && (
                   <p className="text-midnight-400 text-center py-4">No organization memberships recorded</p>
                 )}
               </div>
@@ -335,8 +350,8 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
               <div className="bg-midnight-800 rounded-lg p-4">
                 <h3 className="text-lg font-semibold text-white mb-3">Crime Statistics</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {Object.entries(crimeStats).map(([crimeType, count]) => {
-                    const crimeTypeInfo = CRIME_TYPES.find(ct => ct.id === crimeType);
+                  {Object.entries(crimeStats).map(([crimeType,count])=> {
+                    const crimeTypeInfo=CRIME_TYPES.find(ct=> ct.id===crimeType);
                     return (
                       <div key={crimeType} className="bg-midnight-700 rounded-lg p-3 text-center">
                         <div className={`w-8 h-8 ${crimeTypeInfo?.color || 'bg-gray-600'} rounded-full mx-auto mb-2 flex items-center justify-center`}>
@@ -373,8 +388,8 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
               {entries.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {entries
-                    .sort((a, b) => new Date(b.date) - new Date(a.date))
-                    .map((entry) => (
+                    .sort((a,b)=> new Date(b.date) - new Date(a.date))
+                    .map((entry)=> (
                       <div key={entry.id} className="bg-midnight-700 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center space-x-2">
@@ -383,10 +398,10 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                               {new Date(entry.date).toLocaleDateString()}
                             </span>
                           </div>
-                          {entry.crimeTypes && entry.crimeTypes.length > 0 && (
+                          {entry.crime_types && entry.crime_types.length > 0 && (
                             <div className="flex space-x-1">
-                              {entry.crimeTypes.map(crimeType => {
-                                const crimeTypeInfo = CRIME_TYPES.find(ct => ct.id === crimeType);
+                              {entry.crime_types.map(crimeType=> {
+                                const crimeTypeInfo=CRIME_TYPES.find(ct=> ct.id===crimeType);
                                 return (
                                   <span
                                     key={crimeType}
@@ -400,6 +415,17 @@ const PersonDetailModal = ({ person, isOpen, onClose, onEdit }) => {
                           )}
                         </div>
                         <p className="text-midnight-300 text-sm">{entry.description}</p>
+                        
+                        {/* Entry Assessment */}
+                        <div className="mt-3">
+                          <AssessmentPanel
+                            targetType="entry"
+                            targetId={entry.id}
+                            currentAssessment={entry}
+                            onAssessmentUpdate={()=> window.location.reload()}
+                            className="bg-midnight-600"
+                          />
+                        </div>
                       </div>
                     ))}
                 </div>

@@ -4,13 +4,23 @@ import { useForm } from 'react-hook-form';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import Layout from '../components/Layout';
+import AssessmentPanel from '../components/AssessmentPanel';
 import { useData } from '../contexts/DataContext';
 import OrganizationDetailModal from '../components/OrganizationDetailModal';
 
 const { FiPlus, FiBuilding, FiEdit3, FiBook, FiCalendar, FiX } = FiIcons;
 
 const OrganizationsPage = () => {
-  const { organizations, journals, addOrganization, updateOrganization, addJournal, updateJournal } = useData();
+  const { 
+    organizations, 
+    journals, 
+    addOrganization, 
+    updateOrganization, 
+    addJournal, 
+    updateJournal,
+    getCleanFormData 
+  } = useData();
+
   const [showForm, setShowForm] = useState(false);
   const [editingOrg, setEditingOrg] = useState(null);
   const [showJournalForm, setShowJournalForm] = useState(false);
@@ -19,34 +29,50 @@ const OrganizationsPage = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
-  const { register: registerJournal, handleSubmit: handleJournalSubmit, reset: resetJournal, formState: { errors: journalErrors } } = useForm();
+  const { 
+    register: registerJournal, 
+    handleSubmit: handleJournalSubmit, 
+    reset: resetJournal, 
+    formState: { errors: journalErrors } 
+  } = useForm();
 
-  const onSubmitOrganization = (data) => {
-    if (editingOrg) {
-      updateOrganization(editingOrg.id, data);
-      setEditingOrg(null);
-    } else {
-      addOrganization(data);
+  const onSubmitOrganization = async (data) => {
+    try {
+      if (editingOrg) {
+        await updateOrganization(editingOrg.id, data);
+        setEditingOrg(null);
+      } else {
+        await addOrganization(data);
+      }
+      reset(getCleanFormData('organization'));
+      setShowForm(false);
+    } catch (error) {
+      console.error('Error saving organization:', error);
+      alert('Error saving organization: ' + error.message);
     }
-    reset();
-    setShowForm(false);
   };
 
-  const onSubmitJournal = (data) => {
-    const journalData = {
-      ...data,
-      organizationId: selectedOrg.id,
-      organizationName: selectedOrg.name
-    };
+  const onSubmitJournal = async (data) => {
+    try {
+      const journalData = {
+        ...data,
+        organizationId: selectedOrg.id,
+        organizationName: selectedOrg.name
+      };
 
-    if (editingJournal) {
-      updateJournal(editingJournal.id, journalData);
-      setEditingJournal(null);
-    } else {
-      addJournal(journalData);
+      if (editingJournal) {
+        await updateJournal(editingJournal.id, journalData);
+        setEditingJournal(null);
+      } else {
+        await addJournal(journalData);
+      }
+      
+      resetJournal();
+      setShowJournalForm(false);
+    } catch (error) {
+      console.error('Error saving journal:', error);
+      alert('Error saving journal: ' + error.message);
     }
-    resetJournal();
-    setShowJournalForm(false);
   };
 
   const startEditOrg = (org) => {
@@ -67,7 +93,7 @@ const OrganizationsPage = () => {
   };
 
   const getOrgJournals = (orgId) => {
-    return journals.filter(j => j.organizationId === orgId);
+    return journals.filter(j => j.organization_id === orgId);
   };
 
   return (
@@ -103,9 +129,9 @@ const OrganizationsPage = () => {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  {org.logoUrl ? (
+                  {org.logo_url ? (
                     <img
-                      src={org.logoUrl}
+                      src={org.logo_url}
                       alt={org.name}
                       className="w-12 h-12 rounded-lg object-cover"
                       onError={(e) => {
@@ -114,7 +140,7 @@ const OrganizationsPage = () => {
                       }}
                     />
                   ) : null}
-                  <div className={`bg-red-600 rounded-lg p-2 ${org.logoUrl ? 'hidden' : 'flex'}`}>
+                  <div className={`bg-red-600 rounded-lg p-2 ${org.logo_url ? 'hidden' : 'flex'}`}>
                     <SafeIcon icon={FiBuilding} className="w-6 h-6 text-white" />
                   </div>
                   <div>
@@ -135,7 +161,7 @@ const OrganizationsPage = () => {
                   <SafeIcon icon={FiEdit3} className="w-4 h-4" />
                 </button>
               </div>
-              
+
               <p className="text-midnight-300 text-sm mb-4 line-clamp-3">
                 {org.description?.substring(0, 150)}...
               </p>
@@ -147,14 +173,22 @@ const OrganizationsPage = () => {
                 </div>
               )}
 
+              {/* Assessment Panel */}
+              <AssessmentPanel
+                targetType="organization"
+                targetId={org.id}
+                currentAssessment={org}
+                className="mb-4"
+              />
+
               <div className="flex items-center justify-between pt-4 border-t border-midnight-700">
                 <div className="flex items-center space-x-4">
                   <span className="text-midnight-400 text-xs">
                     {getOrgJournals(org.id).length} journal entries
                   </span>
-                  {org.lastScanned && (
+                  {org.last_scanned && (
                     <span className="text-midnight-500 text-xs">
-                      Last scan: {new Date(org.lastScanned).toLocaleDateString()}
+                      Last scan: {new Date(org.last_scanned).toLocaleDateString()}
                     </span>
                   )}
                 </div>
@@ -206,7 +240,7 @@ const OrganizationsPage = () => {
                   onClick={() => {
                     setShowForm(false);
                     setEditingOrg(null);
-                    reset();
+                    reset(getCleanFormData('organization'));
                   }}
                   className="text-midnight-400 hover:text-white transition-colors"
                 >
@@ -319,7 +353,7 @@ const OrganizationsPage = () => {
                     onClick={() => {
                       setShowForm(false);
                       setEditingOrg(null);
-                      reset();
+                      reset(getCleanFormData('organization'));
                     }}
                     className="flex-1 bg-midnight-700 hover:bg-midnight-600 text-white py-2 px-4 rounded-lg transition-colors"
                   >
@@ -372,9 +406,9 @@ const OrganizationsPage = () => {
 
               {selectedOrg && (
                 <div className="mb-4 p-3 bg-midnight-800 rounded-lg flex items-center space-x-3">
-                  {selectedOrg.logoUrl ? (
+                  {selectedOrg.logo_url ? (
                     <img
-                      src={selectedOrg.logoUrl}
+                      src={selectedOrg.logo_url}
                       alt={selectedOrg.name}
                       className="w-8 h-8 rounded object-cover"
                     />

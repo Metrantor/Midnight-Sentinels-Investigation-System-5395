@@ -4,24 +4,25 @@ import { useForm } from 'react-hook-form';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import Layout from '../components/Layout';
+import AssessmentPanel from '../components/AssessmentPanel';
 import { useData } from '../contexts/DataContext';
 import PersonDetailModal from '../components/PersonDetailModal';
 
-const { FiPlus, FiUsers, FiEdit3, FiFileText, FiCalendar, FiX, FiLink, FiUser } = FiIcons;
+const { FiPlus, FiUsers, FiEdit3, FiFileText, FiX, FiUser } = FiIcons;
 
 const PersonsPage = () => {
   const { 
     persons, 
-    organizations, 
     personEntries, 
     addPerson, 
     updatePerson, 
     addPersonEntry, 
-    updatePersonEntry,
-    hasPersonCommittedCrimes,
-    CRIME_TYPES
+    updatePersonEntry, 
+    hasPersonCommittedCrimes, 
+    CRIME_TYPES,
+    getCleanFormData 
   } = useData();
-  
+
   const [showForm, setShowForm] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [showEntryForm, setShowEntryForm] = useState(false);
@@ -30,52 +31,69 @@ const PersonsPage = () => {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
-  const { register: registerEntry, handleSubmit: handleEntrySubmit, reset: resetEntry, formState: { errors: entryErrors } } = useForm();
+  const { 
+    register: registerEntry, 
+    handleSubmit: handleEntrySubmit, 
+    reset: resetEntry, 
+    formState: { errors: entryErrors } 
+  } = useForm();
 
-  const onSubmitPerson = (data) => {
-    const aliases = data.aliases ? data.aliases.split(',').map(alias => alias.trim()).filter(Boolean) : [];
+  const onSubmitPerson = async (data) => {
+    try {
+      const aliases = data.aliases ? data.aliases.split(',').map(alias => alias.trim()).filter(Boolean) : [];
+      
+      const personData = {
+        name: data.name,
+        handle: data.handle,
+        aliases,
+        enlistDate: data.enlistDate,
+        location: data.location,
+        language: data.language,
+        avatarUrl: data.avatarUrl,
+        pledgeRank: data.pledgeRank,
+        citizenRecordNumber: data.citizenRecordNumber,
+        note: data.note,
+        bio: data.bio,
+        lastScanned: data.lastScanned
+      };
 
-    const personData = {
-      name: data.name,
-      handle: data.handle,
-      aliases,
-      enlistDate: data.enlistDate,
-      location: data.location,
-      language: data.language,
-      avatarUrl: data.avatarUrl,
-      pledgeRank: data.pledgeRank,
-      citizenRecordNumber: data.citizenRecordNumber,
-      note: data.note,
-      bio: data.bio,
-      lastScanned: data.lastScanned
-    };
-
-    if (editingPerson) {
-      updatePerson(editingPerson.id, personData);
-      setEditingPerson(null);
-    } else {
-      addPerson(personData);
+      if (editingPerson) {
+        await updatePerson(editingPerson.id, personData);
+        setEditingPerson(null);
+      } else {
+        await addPerson(personData);
+      }
+      
+      reset(getCleanFormData('person'));
+      setShowForm(false);
+    } catch (error) {
+      console.error('Error saving person:', error);
+      alert('Error saving person: ' + error.message);
     }
-    reset();
-    setShowForm(false);
   };
 
-  const onSubmitEntry = (data) => {
-    const entryData = {
-      ...data,
-      personId: selectedPerson.id,
-      personName: selectedPerson.name,
-      crimeTypes: data.crimeTypes ? Object.keys(data.crimeTypes).filter(key => data.crimeTypes[key]) : []
-    };
+  const onSubmitEntry = async (data) => {
+    try {
+      const entryData = {
+        ...data,
+        personId: selectedPerson.id,
+        personName: selectedPerson.name,
+        crimeTypes: data.crimeTypes ? Object.keys(data.crimeTypes).filter(key => data.crimeTypes[key]) : []
+      };
 
-    if (editingEntry) {
-      updatePersonEntry(editingEntry.id, entryData);
-      setEditingEntry(null);
-    } else {
-      addPersonEntry(entryData);
+      if (editingEntry) {
+        await updatePersonEntry(editingEntry.id, entryData);
+        setEditingEntry(null);
+      } else {
+        await addPersonEntry(entryData);
+      }
+      
+      resetEntry();
+      setShowEntryForm(false);
+    } catch (error) {
+      console.error('Error saving entry:', error);
+      alert('Error saving entry: ' + error.message);
     }
-    resetEntry();
-    setShowEntryForm(false);
   };
 
   const startEditPerson = (person) => {
@@ -91,8 +109,8 @@ const PersonsPage = () => {
   const startEditEntry = (entry) => {
     setEditingEntry(entry);
     const formData = { ...entry };
-    if (entry.crimeTypes) {
-      entry.crimeTypes.forEach(crimeType => {
+    if (entry.crime_types) {
+      entry.crime_types.forEach(crimeType => {
         formData[`crimeTypes.${crimeType}`] = true;
       });
     }
@@ -106,7 +124,7 @@ const PersonsPage = () => {
   };
 
   const getPersonEntries = (personId) => {
-    return personEntries.filter(e => e.personId === personId);
+    return personEntries.filter(e => e.person_id === personId);
   };
 
   return (
@@ -146,9 +164,9 @@ const PersonsPage = () => {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
-                    {person.avatarUrl ? (
+                    {person.avatar_url ? (
                       <img
-                        src={person.avatarUrl}
+                        src={person.avatar_url}
                         alt={person.name}
                         className="w-12 h-12 rounded-lg object-cover"
                         onError={(e) => {
@@ -157,14 +175,14 @@ const PersonsPage = () => {
                         }}
                       />
                     ) : null}
-                    <div className={`bg-red-600 rounded-lg p-2 ${person.avatarUrl ? 'hidden' : 'flex'}`}>
+                    <div className={`bg-red-600 rounded-lg p-2 ${person.avatar_url ? 'hidden' : 'flex'}`}>
                       <SafeIcon icon={FiUser} className="w-6 h-6 text-white" />
                     </div>
                     <div>
                       <h4 className="text-lg font-semibold text-white">{person.name}</h4>
                       <p className="text-midnight-400 text-sm">@{person.handle}</p>
-                      {person.pledgeRank && (
-                        <p className="text-midnight-500 text-xs">{person.pledgeRank}</p>
+                      {person.pledge_rank && (
+                        <p className="text-midnight-500 text-xs">{person.pledge_rank}</p>
                       )}
                     </div>
                   </div>
@@ -185,7 +203,10 @@ const PersonsPage = () => {
                     <p className="text-midnight-400 text-xs mb-1">Aliases:</p>
                     <div className="flex flex-wrap gap-1">
                       {person.aliases.map((alias, index) => (
-                        <span key={index} className="bg-midnight-800 text-midnight-300 px-2 py-1 rounded text-xs">
+                        <span
+                          key={index}
+                          className="bg-midnight-800 text-midnight-300 px-2 py-1 rounded text-xs"
+                        >
                           {alias}
                         </span>
                       ))}
@@ -200,6 +221,14 @@ const PersonsPage = () => {
                     <p className="text-midnight-300 text-sm">{person.location}</p>
                   </div>
                 )}
+
+                {/* Assessment Panel */}
+                <AssessmentPanel
+                  targetType="person"
+                  targetId={person.id}
+                  currentAssessment={person}
+                  className="mb-4"
+                />
 
                 <div className="flex items-center justify-between pt-4 border-t border-midnight-700">
                   <div className="flex items-center space-x-4">
@@ -261,7 +290,7 @@ const PersonsPage = () => {
                   onClick={() => {
                     setShowForm(false);
                     setEditingPerson(null);
-                    reset();
+                    reset(getCleanFormData('person'));
                   }}
                   className="text-midnight-400 hover:text-white transition-colors"
                 >
@@ -419,7 +448,7 @@ const PersonsPage = () => {
                     onClick={() => {
                       setShowForm(false);
                       setEditingPerson(null);
-                      reset();
+                      reset(getCleanFormData('person'));
                     }}
                     className="flex-1 bg-midnight-700 hover:bg-midnight-600 text-white py-2 px-4 rounded-lg transition-colors"
                   >
@@ -472,9 +501,9 @@ const PersonsPage = () => {
 
               {selectedPerson && (
                 <div className="mb-4 p-3 bg-midnight-800 rounded-lg flex items-center space-x-3">
-                  {selectedPerson.avatarUrl ? (
+                  {selectedPerson.avatar_url ? (
                     <img
-                      src={selectedPerson.avatarUrl}
+                      src={selectedPerson.avatar_url}
                       alt={selectedPerson.name}
                       className="w-8 h-8 rounded object-cover"
                     />

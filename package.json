@@ -11,7 +11,8 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "netlify-build": "npm ci && npm run build"
+    "netlify-build": "npm ci && npm run build",
+    "deploy": "npm run build && echo 'Build completed successfully!'"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -19,7 +20,8 @@
     "react-router-dom": "^6.26.0",
     "react-icons": "^5.0.1",
     "framer-motion": "^11.0.8",
-    "react-hook-form": "^7.48.2"
+    "react-hook-form": "^7.48.2",
+    "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
