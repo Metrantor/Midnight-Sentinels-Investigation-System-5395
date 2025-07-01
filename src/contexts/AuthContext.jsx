@@ -35,7 +35,8 @@ export const USER_ROLES = {
       canOverrideAssessments: true,
       canUploadRoleImages: true,
       canManageStatus: true,
-      canFinalizeAssessments: true
+      canFinalizeAssessments: true,
+      canImpersonateUsers: true // 🔥 NEW: Master user can impersonate
     }
   },
   HIGH_JUDGE: {
@@ -60,7 +61,8 @@ export const USER_ROLES = {
       canOverrideJudgeAssessments: true,
       canUploadRoleImages: false,
       canManageStatus: true,
-      canConfirmAssessments: true
+      canConfirmAssessments: true,
+      canImpersonateUsers: false
     }
   },
   JUDGE: {
@@ -85,7 +87,8 @@ export const USER_ROLES = {
       canOverrideAssessments: false,
       canUploadRoleImages: false,
       canManageStatus: true,
-      canConfirmAssessments: true
+      canConfirmAssessments: true,
+      canImpersonateUsers: false
     }
   },
   LEGAL_AUTHORITY: {
@@ -110,7 +113,8 @@ export const USER_ROLES = {
       canOverrideAssessments: false,
       canUploadRoleImages: false,
       canManageStatus: false,
-      canConfirmAssessments: false
+      canConfirmAssessments: false,
+      canImpersonateUsers: false
     }
   },
   BOUNTY_HUNTER: {
@@ -135,7 +139,8 @@ export const USER_ROLES = {
       canOverrideAssessments: false,
       canUploadRoleImages: false,
       canManageStatus: false,
-      canConfirmAssessments: false
+      canConfirmAssessments: false,
+      canImpersonateUsers: false
     }
   },
   CITIZEN: {
@@ -160,7 +165,8 @@ export const USER_ROLES = {
       canOverrideAssessments: false,
       canUploadRoleImages: false,
       canManageStatus: false,
-      canConfirmAssessments: false
+      canConfirmAssessments: false,
+      canImpersonateUsers: false
     }
   }
 };
@@ -192,6 +198,7 @@ export const DANGER_LEVELS = [
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [originalUser, setOriginalUser] = useState(null); // 🔥 NEW: Store original user for impersonation
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
@@ -203,12 +210,18 @@ export const AuthProvider = ({ children }) => {
 
     // Check if user is already logged in
     const storedUser = localStorage.getItem('midnight-user');
+    const storedOriginalUser = localStorage.getItem('midnight-original-user');
+    
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
+        if (storedOriginalUser) {
+          setOriginalUser(JSON.parse(storedOriginalUser));
+        }
       } catch (error) {
         console.error('Error parsing stored user:', error);
         localStorage.removeItem('midnight-user');
+        localStorage.removeItem('midnight-original-user');
       }
     }
   }, []);
@@ -267,7 +280,6 @@ export const AuthProvider = ({ children }) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-
       setUsers(data || []);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -297,6 +309,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'Commander Steel',
         role: 'sentinel',
         is_active: true,
+        is_master_user: true, // 🔥 NEW: Master user flag
         created_at: new Date().toISOString()
       },
       {
@@ -305,6 +318,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'Marcus Aurelius',
         role: 'high_judge',
         is_active: true,
+        is_master_user: false,
         created_at: new Date().toISOString()
       },
       {
@@ -313,6 +327,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'Judith Balance',
         role: 'judge',
         is_active: true,
+        is_master_user: false,
         created_at: new Date().toISOString()
       },
       {
@@ -321,6 +336,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'Rex Hunter',
         role: 'bounty_hunter',
         is_active: true,
+        is_master_user: false,
         created_at: new Date().toISOString()
       },
       {
@@ -329,6 +345,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'Legal Authority',
         role: 'legal_authority',
         is_active: true,
+        is_master_user: false,
         created_at: new Date().toISOString()
       },
       {
@@ -337,6 +354,7 @@ export const AuthProvider = ({ children }) => {
         real_name: 'John Citizen',
         role: 'citizen',
         is_active: true,
+        is_master_user: false,
         created_at: new Date().toISOString()
       }
     ];
@@ -379,14 +397,15 @@ export const AuthProvider = ({ children }) => {
         foundUser = users.find(u => u.email === email && u.is_active);
       }
 
-      // For demo: accept any email/password, but give sentinel role to admin emails
+      // 🔥 FIXED: For demo - give sentinel role to admin emails  
       if (!foundUser) {
         const role = email.includes('admin') || email.includes('sentinel') ? 'sentinel' : 'citizen';
         foundUser = {
           id: crypto.randomUUID(),
           email: email,
           real_name: 'Demo User',
-          role: role
+          role: role,
+          is_master_user: role === 'sentinel' // Demo sentinels are master users
         };
       }
 
@@ -394,12 +413,12 @@ export const AuthProvider = ({ children }) => {
         id: foundUser.id,
         email: foundUser.email,
         real_name: foundUser.real_name,
-        role: foundUser.role
+        role: foundUser.role,
+        is_master_user: foundUser.is_master_user || false
       };
 
       setUser(userData);
       localStorage.setItem('midnight-user', JSON.stringify(userData));
-
       setLoading(false);
       return { success: true };
 
@@ -412,7 +431,33 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
+    setOriginalUser(null);
     localStorage.removeItem('midnight-user');
+    localStorage.removeItem('midnight-original-user');
+  };
+
+  // 🔥 NEW: Impersonation functions
+  const impersonateUser = (targetUser) => {
+    if (!user?.is_master_user || !hasPermission('canImpersonateUsers')) {
+      throw new Error('No permission to impersonate users');
+    }
+
+    if (!originalUser) {
+      setOriginalUser(user);
+      localStorage.setItem('midnight-original-user', JSON.stringify(user));
+    }
+
+    setUser(targetUser);
+    localStorage.setItem('midnight-user', JSON.stringify(targetUser));
+  };
+
+  const stopImpersonation = () => {
+    if (originalUser) {
+      setUser(originalUser);
+      setOriginalUser(null);
+      localStorage.setItem('midnight-user', JSON.stringify(originalUser));
+      localStorage.removeItem('midnight-original-user');
+    }
   };
 
   const hasPermission = (permission) => {
@@ -507,34 +552,47 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
+  // 🔥 FIXED: User management functions with proper error handling
   const addUser = async (userData) => {
     try {
+      console.log('🔥 Adding user with data:', userData);
+      
       const newUser = {
         ...userData,
         id: crypto.randomUUID(),
         is_active: true,
+        is_master_user: false, // 🔥 NEW: Default to false
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
 
+      console.log('🔥 New user object:', newUser);
+
       if (supabaseConnected) {
-        const { error } = await supabase
+        console.log('🔥 Attempting Supabase insert...');
+        const { data, error } = await supabase
           .from('users_ms2024')
-          .insert([newUser]);
+          .insert([newUser])
+          .select()
+          .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error('🔥 Supabase error:', error);
+          throw error;
+        }
 
+        console.log('✅ Supabase insert successful:', data);
         await loadUsers();
       } else {
+        console.log('🔥 Using local storage...');
         const updatedUsers = [...users, newUser];
         setUsers(updatedUsers);
         localStorage.setItem('midnight-users', JSON.stringify(updatedUsers));
       }
 
       return { success: true };
-
     } catch (error) {
-      console.error('Error adding user:', error);
+      console.error('❌ Error adding user:', error);
       return { success: false, error: error.message };
     }
   };
@@ -544,14 +602,10 @@ export const AuthProvider = ({ children }) => {
       if (supabaseConnected) {
         const { error } = await supabase
           .from('users_ms2024')
-          .update({
-            ...updates,
-            updated_at: new Date().toISOString()
-          })
+          .update({ ...updates, updated_at: new Date().toISOString() })
           .eq('id', userId);
 
         if (error) throw error;
-
         await loadUsers();
       } else {
         const updatedUsers = users.map(u =>
@@ -562,7 +616,6 @@ export const AuthProvider = ({ children }) => {
       }
 
       return { success: true };
-
     } catch (error) {
       console.error('Error updating user:', error);
       return { success: false, error: error.message };
@@ -578,7 +631,6 @@ export const AuthProvider = ({ children }) => {
           .eq('id', userId);
 
         if (error) throw error;
-
         await loadUsers();
       } else {
         const updatedUsers = users.filter(u => u.id !== userId);
@@ -587,11 +639,23 @@ export const AuthProvider = ({ children }) => {
       }
 
       return { success: true };
-
     } catch (error) {
       console.error('Error deleting user:', error);
       return { success: false, error: error.message };
     }
+  };
+
+  // 🔥 NEW: Toggle user active status
+  const toggleUserActive = async (userId) => {
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) return { success: false, error: 'User not found' };
+
+    // 🔥 PROTECTION: Master users cannot be deactivated
+    if (targetUser.is_master_user && targetUser.is_active) {
+      return { success: false, error: 'Master users cannot be deactivated' };
+    }
+
+    return await updateUser(userId, { is_active: !targetUser.is_active });
   };
 
   const updateUserRole = async (userId, newRole) => {
@@ -599,14 +663,10 @@ export const AuthProvider = ({ children }) => {
       if (supabaseConnected) {
         const { error } = await supabase
           .from('users_ms2024')
-          .update({
-            role: newRole,
-            updated_at: new Date().toISOString()
-          })
+          .update({ role: newRole, updated_at: new Date().toISOString() })
           .eq('id', userId);
 
         if (error) throw error;
-
         await loadUsers();
       } else {
         const updatedUsers = users.map(u =>
@@ -623,7 +683,6 @@ export const AuthProvider = ({ children }) => {
       }
 
       return { success: true };
-
     } catch (error) {
       console.error('Error updating user role:', error);
       return { success: false, error: error.message };
@@ -664,16 +723,12 @@ export const AuthProvider = ({ children }) => {
         }], { onConflict: 'role_id' });
 
       // Update local state immediately
-      setRoleImages(prev => ({
-        ...prev,
-        [roleId]: urlData.publicUrl
-      }));
+      setRoleImages(prev => ({ ...prev, [roleId]: urlData.publicUrl }));
 
       // Reload role images to make sure
       await loadRoleImages();
 
       return urlData.publicUrl;
-
     } catch (error) {
       console.error('Error uploading role image:', error);
       throw error;
@@ -682,6 +737,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    originalUser, // 🔥 NEW: For impersonation
     login,
     logout,
     loading,
@@ -695,6 +751,9 @@ export const AuthProvider = ({ children }) => {
     addUser,
     updateUser,
     deleteUser,
+    toggleUserActive, // 🔥 NEW
+    impersonateUser, // 🔥 NEW
+    stopImpersonation, // 🔥 NEW
     getAllUsers,
     uploadRoleImage,
     loadRoleImages,

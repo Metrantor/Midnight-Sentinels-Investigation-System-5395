@@ -1,11 +1,11 @@
 // 🔥 COMPLETE DATABASE SCHEMA WITH DIRECT SQL (NO RPC!)
+
 export const createAllTables = async (supabase) => {
   console.log('🚀 Creating COMPLETE database schema with DIRECT SQL...');
-  
+
   try {
     // 🎯 STEP 1: DROP ALL TABLES INDIVIDUALLY
     console.log('🗑️ Dropping existing tables...');
-    
     const tablesToDrop = [
       'assessment_history_ms2024',
       'ship_journals_ms2024', 
@@ -43,7 +43,6 @@ export const createAllTables = async (supabase) => {
 
     // 🎯 STEP 3: ADD MISSING COLUMNS TO EXISTING TABLES
     console.log('🔧 Adding missing assessment columns...');
-    
     const assessmentColumns = [
       { name: 'classification', type: 'TEXT DEFAULT \'harmless\'' },
       { name: 'danger_level', type: 'INTEGER DEFAULT 1' },
@@ -60,7 +59,7 @@ export const createAllTables = async (supabase) => {
     ];
 
     const tablesToUpdate = ['organizations_ms2024', 'persons_ms2024', 'person_entries_ms2024'];
-    
+
     for (const tableName of tablesToUpdate) {
       for (const column of assessmentColumns) {
         try {
@@ -69,7 +68,7 @@ export const createAllTables = async (supabase) => {
             .from(tableName)
             .update({ [column.name]: null })
             .eq('id', 'dummy-test-id-that-does-not-exist');
-          
+
           console.log(`✅ Column ${column.name} exists in ${tableName}`);
         } catch (error) {
           console.log(`❌ Column ${column.name} missing in ${tableName} - manual addition needed`);
@@ -89,9 +88,9 @@ export const createAllTables = async (supabase) => {
 // 🔥 SIMPLE FIELD VALIDATION
 export const validateAllFields = async (supabase) => {
   console.log('🔍 Validating database fields...');
-  
+
   const tables = ['organizations_ms2024', 'persons_ms2024', 'person_entries_ms2024'];
-  
+
   for (const tableName of tables) {
     try {
       // Test if we can select basic fields
@@ -99,19 +98,19 @@ export const validateAllFields = async (supabase) => {
         .from(tableName)
         .select('id, classification, danger_level, status')
         .limit(1);
-        
+
       if (error) {
         console.error(`❌ Missing fields in ${tableName}:`, error.message);
         return false;
       }
-      
+
       console.log(`✅ ${tableName} has required assessment fields`);
     } catch (err) {
       console.error(`❌ Error validating ${tableName}:`, err);
       return false;
     }
   }
-  
+
   console.log('🎉 Field validation completed!');
   return true;
 };
@@ -119,6 +118,19 @@ export const validateAllFields = async (supabase) => {
 // 🔥 MANUAL SQL STATEMENTS FOR SUPABASE SQL EDITOR
 export const getCreateTableSQL = () => {
   return `
+-- 🔥 USERS TABLE WITH ALL REQUIRED FIELDS AND MASTER USER
+ALTER TABLE users_ms2024 
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS is_master_user BOOLEAN DEFAULT false;
+
+-- 🔥 FIX ROLE CONSTRAINT - ALLOW ALL VALID ROLES
+ALTER TABLE users_ms2024 DROP CONSTRAINT IF EXISTS users_ms2024_role_check;
+ALTER TABLE users_ms2024 ADD CONSTRAINT users_ms2024_role_check 
+CHECK (role IN ('sentinel', 'high_judge', 'judge', 'legal_authority', 'bounty_hunter', 'citizen'));
+
 -- 🔥 ORGANIZATIONS TABLE WITH ALL ASSESSMENT FIELDS
 ALTER TABLE organizations_ms2024 
 ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
@@ -134,7 +146,7 @@ ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
 ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
 ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
 
--- 🔥 PERSONS TABLE WITH ALL ASSESSMENT FIELDS  
+-- 🔥 PERSONS TABLE WITH ALL ASSESSMENT FIELDS
 ALTER TABLE persons_ms2024 
 ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
 ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
@@ -173,5 +185,5 @@ ADD CONSTRAINT IF NOT EXISTS chk_person_danger_level CHECK (danger_level >= 1 AN
 
 ALTER TABLE person_entries_ms2024 
 ADD CONSTRAINT IF NOT EXISTS chk_entry_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-  `;
+`;
 };

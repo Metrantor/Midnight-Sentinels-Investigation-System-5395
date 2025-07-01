@@ -5,11 +5,82 @@ import SafeIcon from '../common/SafeIcon';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 
-const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle, FiSettings } = FiIcons;
+const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle, FiSettings, FiDatabase, FiCopy } = FiIcons;
 
 const DatabaseStatus = () => {
   const { dbConnected, connectionError, loading, retryConnection, enablePolling, setEnablePolling } = useData();
   const { user, hasPermission } = useAuth();
+
+  // 🔥 COPY SQL TO CLIPBOARD
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('SQL copied to clipboard! Please run this in your Supabase SQL Editor.');
+    });
+  };
+
+  const sqlToRun = `
+-- 🔥 USERS TABLE WITH ALL REQUIRED FIELDS
+ALTER TABLE users_ms2024 
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 🔥 ORGANIZATIONS TABLE WITH ALL ASSESSMENT FIELDS
+ALTER TABLE organizations_ms2024 
+ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
+ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
+ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
+
+-- 🔥 PERSONS TABLE WITH ALL ASSESSMENT FIELDS
+ALTER TABLE persons_ms2024 
+ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
+ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
+ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
+
+-- 🔥 PERSON ENTRIES TABLE WITH ALL ASSESSMENT FIELDS
+ALTER TABLE person_entries_ms2024 
+ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
+ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
+ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
+ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
+ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
+
+-- 🔥 ADD CONSTRAINTS
+ALTER TABLE organizations_ms2024 
+ADD CONSTRAINT IF NOT EXISTS chk_org_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
+
+ALTER TABLE persons_ms2024 
+ADD CONSTRAINT IF NOT EXISTS chk_person_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
+
+ALTER TABLE person_entries_ms2024 
+ADD CONSTRAINT IF NOT EXISTS chk_entry_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
+`;
 
   if (loading) {
     return (
@@ -43,6 +114,21 @@ const DatabaseStatus = () => {
               {connectionError && (
                 <p className="text-xs text-red-200 mt-1">{connectionError}</p>
               )}
+              
+              {/* 🔥 SQL COPY BUTTON */}
+              {connectionError?.includes('is_active') && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-red-200">Missing database columns detected!</p>
+                  <button
+                    onClick={() => copyToClipboard(sqlToRun)}
+                    className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs flex items-center space-x-1 transition-colors"
+                  >
+                    <SafeIcon icon={FiCopy} className="w-3 h-3" />
+                    <span>Copy SQL Fix</span>
+                  </button>
+                </div>
+              )}
+              
               <button
                 onClick={retryConnection}
                 className="mt-2 bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs flex items-center space-x-1 transition-colors"

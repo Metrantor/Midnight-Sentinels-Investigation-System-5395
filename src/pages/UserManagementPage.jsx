@@ -8,10 +8,24 @@ import RoleImageUpload from '../components/RoleImageUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 
-const { FiPlus, FiSettings, FiEdit3, FiX, FiTrash2, FiUser, FiShield, FiEye, FiEyeOff, FiImage } = FiIcons;
+const { FiPlus, FiSettings, FiEdit3, FiX, FiTrash2, FiUser, FiShield, FiEye, FiEyeOff, FiImage, FiToggleLeft, FiToggleRight, FiUserCheck, FiInfo, FiCalendar, FiMail, FiKey } = FiIcons;
 
 const UserManagementPage = () => {
-  const { hasPermission, USER_ROLES, user: currentUser, supabaseConnected, getAllUsers, addUser, updateUser, deleteUser, updateUserRole, getDisplayName, getDisplayEmail } = useAuth();
+  const {
+    hasPermission,
+    USER_ROLES,
+    user: currentUser,
+    supabaseConnected,
+    getAllUsers,
+    addUser,
+    updateUser,
+    deleteUser,
+    updateUserRole,
+    toggleUserActive,
+    impersonateUser, // 🔥 NEW
+    getDisplayName,
+    getDisplayEmail
+  } = useAuth();
   const { getCleanFormData } = useData();
 
   const [users, setUsers] = useState([]);
@@ -22,6 +36,9 @@ const UserManagementPage = () => {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showRoleImageModal, setShowRoleImageModal] = useState(false);
   const [selectedRoleForImage, setSelectedRoleForImage] = useState(null);
+  // 🔥 NEW: Admin Properties Panel
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminPanelUser, setAdminPanelUser] = useState(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
@@ -33,7 +50,9 @@ const UserManagementPage = () => {
     setLoading(true);
     try {
       const allUsers = getAllUsers();
-      setUsers(allUsers);
+      // 🔥 FIXED: Sort users consistently by creation date (newest first)
+      const sortedUsers = allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setUsers(sortedUsers);
     } catch (error) {
       console.error('Error loading users:', error);
     } finally {
@@ -62,7 +81,6 @@ const UserManagementPage = () => {
 
       reset(getCleanFormData('user'));
       setShowUserForm(false);
-
     } catch (error) {
       console.error('Error saving user:', error);
       alert('Error saving user: ' + error.message);
@@ -81,6 +99,12 @@ const UserManagementPage = () => {
       return;
     }
 
+    const userToDelete = users.find(u => u.id === id);
+    if (userToDelete?.is_master_user) {
+      alert('Master users cannot be deleted!');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this user?')) {
       try {
         const result = await deleteUser(id);
@@ -93,6 +117,36 @@ const UserManagementPage = () => {
         console.error('Error deleting user:', error);
         alert('Error deleting user: ' + error.message);
       }
+    }
+  };
+
+  // 🔥 FIXED: Keep original order after status change
+  const handleToggleActive = async (userId) => {
+    const userToToggle = users.find(u => u.id === userId);
+    if (userToToggle?.is_master_user && userToToggle.is_active) {
+      alert('Master users cannot be deactivated!');
+      return;
+    }
+
+    try {
+      const result = await toggleUserActive(userId);
+      if (result.success) {
+        // 🔥 FIXED: Update local state without reordering
+        const updatedUsers = users.map(u => 
+          u.id === userId ? { ...u, is_active: !u.is_active } : u
+        );
+        setUsers(updatedUsers);
+        
+        // Also update admin panel if it's open for this user
+        if (adminPanelUser && adminPanelUser.id === userId) {
+          setAdminPanelUser({ ...adminPanelUser, is_active: !adminPanelUser.is_active });
+        }
+      } else {
+        alert('Error updating user status: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error toggling user status:', error);
+      alert('Error updating user status: ' + error.message);
     }
   };
 
@@ -131,6 +185,23 @@ const UserManagementPage = () => {
   const handleImageUploaded = () => {
     // Reload to show new image
     window.location.reload();
+  };
+
+  // 🔥 NEW: Open Admin Properties Panel
+  const openAdminPanel = (user) => {
+    setAdminPanelUser(user);
+    setShowAdminPanel(true);
+  };
+
+  // 🔥 NEW: Handle Impersonation from Admin Panel
+  const handleImpersonateFromPanel = (targetUser) => {
+    try {
+      impersonateUser(targetUser);
+      setShowAdminPanel(false);
+      alert(`Now impersonating ${targetUser.real_name}`);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
   };
 
   if (!hasPermission('canManageUsers')) {
@@ -185,17 +256,20 @@ const UserManagementPage = () => {
           {users.map((user) => {
             const role = getUserRole(user.role);
             const isCurrentUser = currentUser && currentUser.id === user.id;
+            const isMasterUser = user.is_master_user;
 
             return (
               <motion.div
                 key={user.id}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-midnight-900 rounded-xl p-6 border border-midnight-700"
+                className={`bg-midnight-900 rounded-xl p-6 border transition-all ${
+                  !user.is_active ? 'border-red-500/30 bg-red-900/10' : 'border-midnight-700'
+                } ${isMasterUser ? 'ring-2 ring-purple-500/30' : ''}`}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center space-x-3">
-                    {/* 🔥 FIXED: Show current role image */}
+                    {/* Role Image */}
                     {role?.image ? (
                       <img
                         src={role.image}
@@ -218,6 +292,11 @@ const UserManagementPage = () => {
                             You
                           </span>
                         )}
+                        {isMasterUser && (
+                          <span className="ml-2 text-xs bg-purple-600 text-white px-2 py-1 rounded">
+                            🔑
+                          </span>
+                        )}
                       </p>
                       {hasPermission('canViewSensitiveData') && (
                         <p className="text-midnight-300 text-sm">{user.real_name}</p>
@@ -226,6 +305,16 @@ const UserManagementPage = () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-1">
+                    {/* 🔥 NEW: Admin Properties Button */}
+                    {currentUser?.is_master_user && (
+                      <button
+                        onClick={() => openAdminPanel(user)}
+                        className="text-purple-400 hover:text-purple-300 transition-colors p-1"
+                        title="Admin Properties"
+                      >
+                        <SafeIcon icon={FiInfo} className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => startEditUser(user)}
                       className="text-blue-400 hover:text-blue-300 transition-colors p-1"
@@ -238,6 +327,7 @@ const UserManagementPage = () => {
                         onClick={() => handleDeleteUser(user.id)}
                         className="text-red-400 hover:text-red-300 transition-colors p-1"
                         title="Delete User"
+                        disabled={isMasterUser}
                       >
                         <SafeIcon icon={FiTrash2} className="w-4 h-4" />
                       </button>
@@ -261,22 +351,58 @@ const UserManagementPage = () => {
                   </div>
                 </div>
 
-                {/* Permissions Preview - FIXED HEIGHT NO SCROLLBARS */}
+                {/* Active Status Toggle */}
+                <div className="mb-4 p-3 bg-midnight-800 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${user.is_active ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                      <span className="text-white text-sm">
+                        {user.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleToggleActive(user.id)}
+                      disabled={isMasterUser && user.is_active}
+                      className={`transition-colors ${
+                        isMasterUser && user.is_active 
+                          ? 'text-midnight-600 cursor-not-allowed' 
+                          : user.is_active 
+                            ? 'text-green-400 hover:text-green-300' 
+                            : 'text-red-400 hover:text-red-300'
+                      }`}
+                      title={
+                        isMasterUser && user.is_active 
+                          ? 'Master users cannot be deactivated' 
+                          : user.is_active 
+                            ? 'Deactivate User' 
+                            : 'Activate User'
+                      }
+                    >
+                      <SafeIcon 
+                        icon={user.is_active ? FiToggleRight : FiToggleLeft} 
+                        className="w-5 h-5" 
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Permissions Preview */}
                 <div className="space-y-2">
                   <p className="text-midnight-400 text-xs font-medium">Key Permissions:</p>
                   <div className="min-h-[120px]">
                     <div className="flex flex-wrap gap-1">
-                      {role && Object.entries(role.permissions)
-                        .filter(([, allowed]) => allowed)
-                        .slice(0, 6)
-                        .map(([permission]) => (
-                          <span
-                            key={permission}
-                            className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs"
-                          >
-                            {permission.replace(/([A-Z])/g, ' $1').toLowerCase()}
-                          </span>
-                        ))}
+                      {role &&
+                        Object.entries(role.permissions)
+                          .filter(([, allowed]) => allowed)
+                          .slice(0, 6)
+                          .map(([permission]) => (
+                            <span
+                              key={permission}
+                              className="bg-green-900/30 text-green-400 px-2 py-1 rounded text-xs"
+                            >
+                              {permission.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                            </span>
+                          ))}
                       {role && Object.values(role.permissions).filter(Boolean).length > 6 && (
                         <span className="text-midnight-400 text-xs">
                           +{Object.values(role.permissions).filter(Boolean).length - 6} more
@@ -311,7 +437,7 @@ const UserManagementPage = () => {
           </div>
         )}
 
-        {/* Role Permissions Overview - FIXED HEIGHT NO SCROLLBARS */}
+        {/* Role Permissions Overview */}
         <div className="bg-midnight-900 rounded-xl border border-midnight-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-lg font-semibold text-white flex items-center">
@@ -333,7 +459,6 @@ const UserManagementPage = () => {
             {Object.values(USER_ROLES).map((role) => (
               <div key={role.id} className="bg-midnight-800 rounded-lg p-4">
                 <div className="flex items-center space-x-2 mb-3">
-                  {/* 🔥 FIXED: Show current role image */}
                   {role.image ? (
                     <img
                       src={role.image}
@@ -359,8 +484,6 @@ const UserManagementPage = () => {
                     </button>
                   )}
                 </div>
-
-                {/* FIXED HEIGHT - NO SCROLLBARS */}
                 <div className="min-h-[280px]">
                   <div className="space-y-1">
                     {Object.entries(role.permissions).map(([permission, allowed]) => (
@@ -380,6 +503,208 @@ const UserManagementPage = () => {
           </div>
         </div>
       </div>
+
+      {/* 🔥 NEW: Admin Properties Panel */}
+      <AnimatePresence>
+        {showAdminPanel && adminPanelUser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-midnight-900 rounded-xl p-6 w-full max-w-2xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <SafeIcon icon={FiKey} className="w-6 h-6 text-purple-400" />
+                  <h3 className="text-xl font-semibold text-white">Admin Properties</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAdminPanel(false);
+                    setAdminPanelUser(null);
+                  }}
+                  className="text-midnight-400 hover:text-white transition-colors"
+                >
+                  <SafeIcon icon={FiX} className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* User Header */}
+              <div className="mb-6 p-4 bg-midnight-800 rounded-lg">
+                <div className="flex items-center space-x-4">
+                  {getUserRole(adminPanelUser.role)?.image ? (
+                    <img
+                      src={getUserRole(adminPanelUser.role).image}
+                      alt={getUserRole(adminPanelUser.role).name}
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <SafeIcon icon={FiUser} className="w-8 h-8 text-white" />
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xl font-bold text-white">{adminPanelUser.real_name}</h4>
+                    <p className="text-midnight-300">{adminPanelUser.email}</p>
+                    <p className="text-midnight-400 text-sm">{getUserRole(adminPanelUser.role)?.name}</p>
+                  </div>
+                  {adminPanelUser.is_master_user && (
+                    <div className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      🔑 Master User
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Admin Properties Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {/* User ID */}
+                <div className="bg-midnight-800 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <SafeIcon icon={FiUser} className="w-4 h-4 text-blue-400" />
+                    <span className="text-midnight-300 text-sm font-medium">User ID</span>
+                  </div>
+                  <p className="text-white font-mono text-sm">{adminPanelUser.id}</p>
+                </div>
+
+                {/* Email */}
+                <div className="bg-midnight-800 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <SafeIcon icon={FiMail} className="w-4 h-4 text-green-400" />
+                    <span className="text-midnight-300 text-sm font-medium">Email</span>
+                  </div>
+                  <p className="text-white text-sm">{adminPanelUser.email}</p>
+                </div>
+
+                {/* Created At */}
+                <div className="bg-midnight-800 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <SafeIcon icon={FiCalendar} className="w-4 h-4 text-yellow-400" />
+                    <span className="text-midnight-300 text-sm font-medium">Created</span>
+                  </div>
+                  <p className="text-white text-sm">{new Date(adminPanelUser.created_at).toLocaleString()}</p>
+                </div>
+
+                {/* Last Login */}
+                <div className="bg-midnight-800 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <SafeIcon icon={FiCalendar} className="w-4 h-4 text-purple-400" />
+                    <span className="text-midnight-300 text-sm font-medium">Last Login</span>
+                  </div>
+                  <p className="text-white text-sm">
+                    {adminPanelUser.last_login 
+                      ? new Date(adminPanelUser.last_login).toLocaleString()
+                      : 'Never'
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Status & Flags */}
+              <div className="mb-6 bg-midnight-800 rounded-lg p-4">
+                <h5 className="text-lg font-semibold text-white mb-3">Status & Flags</h5>
+                <div className="space-y-3">
+                  {/* Active Status */}
+                  <div className="flex items-center justify-between p-3 bg-midnight-700 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-3 h-3 rounded-full ${adminPanelUser.is_active ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                      <span className="text-white font-medium">Account Status</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-sm ${adminPanelUser.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                        {adminPanelUser.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      <button
+                        onClick={() => handleToggleActive(adminPanelUser.id)}
+                        disabled={adminPanelUser.is_master_user && adminPanelUser.is_active}
+                        className={`transition-colors ${
+                          adminPanelUser.is_master_user && adminPanelUser.is_active 
+                            ? 'text-midnight-600 cursor-not-allowed' 
+                            : adminPanelUser.is_active 
+                              ? 'text-green-400 hover:text-green-300' 
+                              : 'text-red-400 hover:text-red-300'
+                        }`}
+                        title={
+                          adminPanelUser.is_master_user && adminPanelUser.is_active 
+                            ? 'Master users cannot be deactivated' 
+                            : adminPanelUser.is_active 
+                              ? 'Deactivate User' 
+                              : 'Activate User'
+                        }
+                      >
+                        <SafeIcon 
+                          icon={adminPanelUser.is_active ? FiToggleRight : FiToggleLeft} 
+                          className="w-5 h-5" 
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Master User Flag */}
+                  <div className="flex items-center justify-between p-3 bg-midnight-700 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <SafeIcon icon={FiKey} className="w-4 h-4 text-purple-400" />
+                      <span className="text-white font-medium">Master User</span>
+                    </div>
+                    <span className={`text-sm font-medium ${adminPanelUser.is_master_user ? 'text-purple-400' : 'text-midnight-400'}`}>
+                      {adminPanelUser.is_master_user ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 🔥 NEW: Impersonation Section */}
+              {currentUser?.is_master_user && adminPanelUser.id !== currentUser.id && adminPanelUser.is_active && (
+                <div className="mb-6 bg-orange-900/30 border border-orange-500 rounded-lg p-4">
+                  <h5 className="text-lg font-semibold text-orange-300 mb-3 flex items-center space-x-2">
+                    <SafeIcon icon={FiEye} className="w-5 h-5" />
+                    <span>Impersonation</span>
+                  </h5>
+                  <p className="text-orange-200 text-sm mb-4">
+                    Experience the application as this user with their permissions and restrictions.
+                  </p>
+                  <button
+                    onClick={() => handleImpersonateFromPanel(adminPanelUser)}
+                    className="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-lg flex items-center justify-center space-x-2 transition-colors font-medium"
+                  >
+                    <SafeIcon icon={FiUserCheck} className="w-5 h-5" />
+                    <span>Impersonate {adminPanelUser.real_name}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowAdminPanel(false);
+                    startEditUser(adminPanelUser);
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-colors"
+                >
+                  <SafeIcon icon={FiEdit3} className="w-4 h-4" />
+                  <span>Edit User</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAdminPanel(false);
+                    setAdminPanelUser(null);
+                  }}
+                  className="bg-midnight-700 hover:bg-midnight-600 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* User Form Modal */}
       <AnimatePresence>
@@ -535,7 +860,6 @@ const UserManagementPage = () => {
                     }`}
                   >
                     <div className="flex items-center space-x-3 mb-3">
-                      {/* 🔥 FIXED: Show current role image */}
                       {role.image ? (
                         <img
                           src={role.image}
@@ -558,7 +882,8 @@ const UserManagementPage = () => {
                       </div>
                     </div>
                     <div className="text-xs text-midnight-300">
-                      Key permissions: {Object.entries(role.permissions)
+                      Key permissions:{' '}
+                      {Object.entries(role.permissions)
                         .filter(([, allowed]) => allowed)
                         .slice(0, 2)
                         .map(([permission]) => permission.replace(/([A-Z])/g, ' $1').toLowerCase())

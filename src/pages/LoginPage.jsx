@@ -9,7 +9,7 @@ const { FiShield, FiMail, FiLock } = FiIcons;
 
 const LoginPage = () => {
   const { user, login, loading } = useAuth();
-  const [email, setEmail] = useState('admin@test.com');
+  const [email, setEmail] = useState('sentinel@test.com');
   const [password, setPassword] = useState('123');
   const [error, setError] = useState('');
 
@@ -20,7 +20,7 @@ const LoginPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       const result = await login(email, password);
       if (!result.success) {
@@ -50,10 +50,12 @@ const LoginPage = () => {
 
           {/* Demo Info */}
           <div className="mb-6 p-4 bg-green-900/30 border border-green-500 rounded-lg">
-            <p className="text-green-200 text-sm font-medium mb-2">✅ Demo Login - Einfach klicken:</p>
-            <div className="text-green-300 text-xs">
-              <p>Beliebige Eingaben funktionieren!</p>
-              <p>Oder einfach "Anmelden" klicken.</p>
+            <p className="text-green-200 text-sm font-medium mb-2">✅ Demo Login:</p>
+            <div className="text-green-300 text-xs space-y-1">
+              <p><strong>Sentinel:</strong> sentinel@test.com</p>
+              <p><strong>Judge:</strong> judge@test.com</p>
+              <p><strong>Bounty Hunter:</strong> bounty@test.com</p>
+              <p>Passwort: beliebig</p>
             </div>
           </div>
 
@@ -75,7 +77,7 @@ const LoginPage = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter any email"
+                  placeholder="Enter email"
                 />
               </div>
             </div>
@@ -91,7 +93,7 @@ const LoginPage = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter any password"
+                  placeholder="Enter password"
                 />
               </div>
             </div>
