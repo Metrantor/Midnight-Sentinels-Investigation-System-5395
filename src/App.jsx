@@ -10,10 +10,11 @@ import OrganizationsPage from './pages/OrganizationsPage';
 import PersonsPage from './pages/PersonsPage';
 import SearchPage from './pages/SearchPage';
 import IncidentPage from './pages/IncidentPage';
+import IncidentsListPage from './pages/IncidentsListPage';
+import HearingsPage from './pages/HearingsPage';
 import RelationshipsPage from './pages/RelationshipsPage';
-import ManufacturersPage from './pages/ManufacturersPage';
 import ShipsPage from './pages/ShipsPage';
-import UserManagementPage from './pages/UserManagementPage';
+import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -25,56 +26,17 @@ function App() {
             <DatabaseStatus />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-              <Route path="/assessments" element={
-                <ProtectedRoute>
-                  <AssessmentsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/organizations" element={
-                <ProtectedRoute>
-                  <OrganizationsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/persons" element={
-                <ProtectedRoute>
-                  <PersonsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/search" element={
-                <ProtectedRoute>
-                  <SearchPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/incident" element={
-                <ProtectedRoute>
-                  <IncidentPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/relationships" element={
-                <ProtectedRoute>
-                  <RelationshipsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/manufacturers" element={
-                <ProtectedRoute>
-                  <ManufacturersPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/ships" element={
-                <ProtectedRoute>
-                  <ShipsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/users" element={
-                <ProtectedRoute>
-                  <UserManagementPage />
-                </ProtectedRoute>
-              } />
+              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/assessments" element={<ProtectedRoute><AssessmentsPage /></ProtectedRoute>} />
+              <Route path="/organizations" element={<ProtectedRoute><OrganizationsPage /></ProtectedRoute>} />
+              <Route path="/persons" element={<ProtectedRoute><PersonsPage /></ProtectedRoute>} />
+              <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+              <Route path="/incident" element={<ProtectedRoute><IncidentPage /></ProtectedRoute>} />
+              <Route path="/incidents" element={<ProtectedRoute><IncidentsListPage /></ProtectedRoute>} />
+              <Route path="/hearings" element={<ProtectedRoute><HearingsPage /></ProtectedRoute>} />
+              <Route path="/relationships" element={<ProtectedRoute><RelationshipsPage /></ProtectedRoute>} />
+              <Route path="/ships" element={<ProtectedRoute><ShipsPage /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
             </Routes>
           </div>
         </Router>

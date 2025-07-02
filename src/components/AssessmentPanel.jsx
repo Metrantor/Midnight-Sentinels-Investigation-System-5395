@@ -5,14 +5,17 @@ import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 
-const { FiGavel, FiClock, FiUser, FiX, FiCheck, FiUserCheck } = FiIcons;
+const { FiGavel, FiClock, FiUser, FiX, FiCheck, FiUserCheck, FiUsers, FiMessageSquare, FiPlus, FiEye } = FiIcons;
 
 const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessmentUpdate, className = "" }) => {
   const { user, hasPermission, canAssess, canManageStatus, ASSESSMENT_CLASSIFICATIONS, STATUS_TYPES, DANGER_LEVELS, getDisplayName, getUserRole, USER_ROLES } = useAuth();
-  const { updateAssessment, updateStatus, getAssessmentHistory } = useData();
+  const { updateAssessment, updateStatus, getAssessmentHistory, getWitnessStatementsForIncident, createHearing, getHearingsForEntry } = useData();
 
   const [showAssessmentForm, setShowAssessmentForm] = useState(false);
   const [showStatusForm, setShowStatusForm] = useState(false);
+  const [showWitnessesModal, setShowWitnessesModal] = useState(false);
+  const [showHearingModal, setShowHearingModal] = useState(false);
+  const [showHearingsListModal, setShowHearingsListModal] = useState(false);
   const [selectedClassification, setSelectedClassification] = useState(currentAssessment?.classification || 'harmless');
   const [selectedDangerLevel, setSelectedDangerLevel] = useState(currentAssessment?.danger_level || 1);
   const [selectedStatus, setSelectedStatus] = useState(currentAssessment?.status || 'pending');
@@ -20,7 +23,14 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
   const [loading, setLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
+  // 🔥 NEW: Hearing form state
+  const [hearingTitle, setHearingTitle] = useState('');
+  const [hearingQuestion, setHearingQuestion] = useState('');
+  const [selectedWitnesses, setSelectedWitnesses] = useState([]);
+
   const history = getAssessmentHistory(targetType, targetId);
+  const witnessStatements = targetType === 'entry' ? getWitnessStatementsForIncident(targetId) : [];
+  const hearings = targetType === 'entry' ? getHearingsForEntry(targetId) : [];
 
   const canUserAssess = canAssess(
     currentAssessment?.assessed_by_role,
@@ -31,6 +41,9 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
     currentAssessment?.status,
     currentAssessment?.assessed_by_role
   );
+
+  // 🔥 NEW: Can create hearings (Judges and above)
+  const canCreateHearings = hasPermission('canAssessDangerLevel');
 
   const getClassificationInfo = (classificationId) => {
     return ASSESSMENT_CLASSIFICATIONS.find(c => c.id === classificationId) || ASSESSMENT_CLASSIFICATIONS[0];
@@ -44,7 +57,6 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
     return DANGER_LEVELS.find(d => d.level === level) || DANGER_LEVELS[0];
   };
 
-  // 🎯 FIXED: Separate handlers with proper event stopping
   const handleOpenAssessmentForm = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -65,6 +77,27 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
     setShowHistory(!showHistory);
   };
 
+  // 🔥 NEW: Handle witness-related actions
+  const handleOpenWitnessesModal = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowWitnessesModal(true);
+  };
+
+  const handleOpenHearingModal = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowHearingModal(true);
+    setHearingTitle(`Hearing for Entry: ${currentAssessment?.person_name || 'Unknown'}`);
+    setSelectedWitnesses(witnessStatements.map(ws => ws.witness_user_id));
+  };
+
+  const handleOpenHearingsListModal = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowHearingsListModal(true);
+  };
+
   const handleSubmitAssessment = async () => {
     if (!canUserAssess) return;
 
@@ -75,7 +108,6 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
         dangerLevel: selectedDangerLevel,
         notes
       });
-
       setShowAssessmentForm(false);
       if (onAssessmentUpdate) {
         onAssessmentUpdate();
@@ -106,22 +138,55 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
     }
   };
 
-  // 🔥 FIXED: Correct Danger Level Circle Display
+  // 🔥 NEW: Handle hearing creation
+  const handleCreateHearing = async () => {
+    if (!hearingTitle.trim() || !hearingQuestion.trim() || selectedWitnesses.length === 0) {
+      alert('Please fill in all fields and select at least one witness');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await createHearing({
+        entryId: targetId,
+        title: hearingTitle,
+        question: hearingQuestion,
+        witnessIds: selectedWitnesses,
+        crimeTypes: currentAssessment?.crime_types || [],
+        entryDescription: currentAssessment?.description || ''
+      });
+
+      setShowHearingModal(false);
+      setHearingTitle('');
+      setHearingQuestion('');
+      setSelectedWitnesses([]);
+      
+      if (onAssessmentUpdate) {
+        onAssessmentUpdate();
+      }
+
+      alert('Hearing created successfully! Witnesses have been notified.');
+    } catch (error) {
+      console.error('Error creating hearing:', error);
+      alert('Error creating hearing: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderDangerLevelCircles = (level) => {
     const circles = [];
     for (let i = 1; i <= 6; i++) {
-      let circleColor = 'bg-gray-600'; // Default: empty gray
-      
+      let circleColor = 'bg-gray-600';
       if (i <= level) {
-        // Determine color based on position and level
         if (i <= 2) {
-          circleColor = 'bg-green-500'; // Positions 1-2: Green
+          circleColor = 'bg-green-500';
         } else if (i <= 4) {
-          circleColor = 'bg-yellow-500'; // Positions 3-4: Yellow
+          circleColor = 'bg-yellow-500';
         } else if (i === 5) {
-          circleColor = 'bg-orange-500'; // Position 5: Orange
+          circleColor = 'bg-orange-500';
         } else if (i === 6) {
-          circleColor = 'bg-red-500'; // Position 6: Red
+          circleColor = 'bg-red-500';
         }
       }
 
@@ -136,18 +201,15 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
     return circles;
   };
 
-  // 🔥 FIXED: Enhanced Assessor Info with Role Image and Real Name
   const renderAssessorInfo = (assessment) => {
     const assessorRole = assessment?.assessed_by_role;
     const assessorName = assessment?.assessed_by_name;
-    
-    // Get role info and image
+
     const roleInfo = assessorRole ? USER_ROLES[assessorRole.toUpperCase()] : null;
     const roleImage = roleInfo?.image;
 
     return (
       <div className="flex items-center space-x-2">
-        {/* Role Image */}
         {roleImage ? (
           <img
             src={roleImage}
@@ -162,7 +224,6 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
         <div className={`bg-blue-600 rounded p-1 ${roleImage ? 'hidden' : 'flex'}`}>
           <SafeIcon icon={FiUserCheck} className="w-4 h-4 text-white" />
         </div>
-        
         <div className="text-xs">
           <div className="text-midnight-300 font-medium">{assessorName || 'Unknown'}</div>
           <div className="text-midnight-500">{roleInfo?.name || assessorRole || 'Unknown Role'}</div>
@@ -182,8 +243,7 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
           <SafeIcon icon={FiGavel} className="w-4 h-4 text-purple-400" />
           <h4 className="text-sm font-medium text-white">Judgment</h4>
         </div>
-        
-        {/* 🎯 FIXED: Better Button Layout */}
+
         <div className="flex flex-col space-y-1">
           {history.length > 0 && (
             <button
@@ -214,10 +274,48 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
               </button>
             )}
           </div>
+          
+          {/* 🔥 NEW: Witness and Hearing buttons for entries */}
+          {targetType === 'entry' && (
+            <div className="flex space-x-1 mt-2">
+              {witnessStatements.length > 0 && (
+                <button
+                  onClick={handleOpenWitnessesModal}
+                  className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center space-x-1"
+                  title="View Witnesses"
+                >
+                  <SafeIcon icon={FiUsers} className="w-3 h-3" />
+                  <span>Witnesses ({witnessStatements.length})</span>
+                </button>
+              )}
+              
+              {canCreateHearings && witnessStatements.length > 0 && (
+                <button
+                  onClick={handleOpenHearingModal}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center space-x-1"
+                  title="Create Hearing"
+                >
+                  <SafeIcon icon={FiPlus} className="w-3 h-3" />
+                  <span>Hearing</span>
+                </button>
+              )}
+
+              {hearings.length > 0 && (
+                <button
+                  onClick={handleOpenHearingsListModal}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs transition-colors flex items-center space-x-1"
+                  title="View Hearings"
+                >
+                  <SafeIcon icon={FiEye} className="w-3 h-3" />
+                  <span>Hearings ({hearings.length})</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 🎯 GROUPED: Status & Danger Level */}
+      {/* Status & Classification Display */}
       <div className="space-y-3">
         {/* Classification */}
         <div className="flex items-center justify-between">
@@ -227,9 +325,8 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
           </span>
         </div>
 
-        {/* 🎯 GROUPED SECTION: Status & Danger Level */}
+        {/* Status & Danger Level */}
         <div className="bg-midnight-700 rounded-lg p-3 space-y-2">
-          {/* Status */}
           <div className="flex items-center justify-between">
             <span className="text-midnight-400 text-xs">Status:</span>
             <span className={`px-2 py-1 rounded text-xs font-medium ${currentStatusInfo.color} ${currentStatusInfo.textColor}`}>
@@ -237,7 +334,6 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
             </span>
           </div>
 
-          {/* Danger Level */}
           <div className="flex items-center justify-between">
             <span className="text-midnight-400 text-xs">Danger Level:</span>
             <div className="flex items-center space-x-1">
@@ -247,7 +343,7 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
           </div>
         </div>
 
-        {/* 🔥 ENHANCED: Better Assessor Display */}
+        {/* Assessor Info */}
         {currentAssessment?.assessed_by_name && (
           <>
             <div className="mt-3 pt-3 border-t border-midnight-700">
@@ -301,6 +397,276 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
                 </div>
               ))}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🔥 NEW: Witnesses Modal */}
+      <AnimatePresence>
+        {showWitnessesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-midnight-900 rounded-xl p-6 w-full max-w-2xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                  <SafeIcon icon={FiUsers} className="w-5 h-5 text-green-400" />
+                  <span>Witnesses for this Incident</span>
+                </h3>
+                <button
+                  onClick={() => setShowWitnessesModal(false)}
+                  className="text-midnight-400 hover:text-white transition-colors"
+                >
+                  <SafeIcon icon={FiX} className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {witnessStatements.map((statement) => (
+                  <div key={statement.id} className="bg-midnight-800 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <h4 className="text-white font-medium">{statement.witness_name}</h4>
+                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium mt-1 ${
+                          statement.statement_status === 'submitted' ? 'bg-green-600 text-green-100' :
+                          statement.statement_status === 'pending' ? 'bg-yellow-600 text-yellow-100' :
+                          'bg-gray-600 text-gray-100'
+                        }`}>
+                          {statement.statement_status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {statement.statement && (
+                      <div className="mt-3 p-3 bg-midnight-700 rounded">
+                        <h5 className="text-midnight-300 text-xs mb-1">Statement:</h5>
+                        <p className="text-white text-sm">{statement.statement}</p>
+                        {statement.submitted_at && (
+                          <p className="text-midnight-400 text-xs mt-2">
+                            Submitted: {new Date(statement.submitted_at).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {statement.judge_comment && (
+                      <div className="mt-3 p-3 bg-purple-900/30 border border-purple-500 rounded">
+                        <h5 className="text-purple-300 text-xs mb-1">Judge Comment:</h5>
+                        <p className="text-purple-200 text-sm">{statement.judge_comment}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🔥 NEW: Create Hearing Modal */}
+      <AnimatePresence>
+        {showHearingModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-midnight-900 rounded-xl p-6 w-full max-w-2xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                  <SafeIcon icon={FiGavel} className="w-5 h-5 text-orange-400" />
+                  <span>Create Hearing</span>
+                </h3>
+                <button
+                  onClick={() => setShowHearingModal(false)}
+                  className="text-midnight-400 hover:text-white transition-colors"
+                >
+                  <SafeIcon icon={FiX} className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-midnight-300 mb-1">
+                    Hearing Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={hearingTitle}
+                    onChange={(e) => setHearingTitle(e.target.value)}
+                    className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="Enter hearing title"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-midnight-300 mb-1">
+                    Question/Statement for Witnesses *
+                  </label>
+                  <textarea
+                    value={hearingQuestion}
+                    onChange={(e) => setHearingQuestion(e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2 bg-midnight-800 border border-midnight-600 rounded-lg text-white placeholder-midnight-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    placeholder="Enter the question or statement you want witnesses to respond to..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-midnight-300 mb-2">
+                    Selected Witnesses ({selectedWitnesses.length})
+                  </label>
+                  <div className="space-y-2 max-h-32 overflow-y-auto bg-midnight-800 rounded-lg p-3">
+                    {witnessStatements.map((statement) => (
+                      <label key={statement.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedWitnesses.includes(statement.witness_user_id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedWitnesses([...selectedWitnesses, statement.witness_user_id]);
+                            } else {
+                              setSelectedWitnesses(selectedWitnesses.filter(id => id !== statement.witness_user_id));
+                            }
+                          }}
+                          className="rounded bg-midnight-700 border-midnight-600 text-orange-600 focus:ring-orange-500"
+                        />
+                        <span className="text-white text-sm">{statement.witness_name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setShowHearingModal(false)}
+                    className="flex-1 bg-midnight-700 hover:bg-midnight-600 text-white py-2 px-4 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreateHearing}
+                    disabled={loading || !hearingTitle.trim() || !hearingQuestion.trim() || selectedWitnesses.length === 0}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                        <span>Creating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <SafeIcon icon={FiGavel} className="w-4 h-4" />
+                        <span>Create Hearing</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🔥 NEW: Hearings List Modal */}
+      <AnimatePresence>
+        {showHearingsListModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-midnight-900 rounded-xl p-6 w-full max-w-4xl border border-midnight-700 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
+                  <SafeIcon icon={FiMessageSquare} className="w-5 h-5 text-indigo-400" />
+                  <span>Hearings for this Entry</span>
+                </h3>
+                <button
+                  onClick={() => setShowHearingsListModal(false)}
+                  className="text-midnight-400 hover:text-white transition-colors"
+                >
+                  <SafeIcon icon={FiX} className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {hearings.map((hearing) => (
+                  <div key={hearing.id} className="bg-midnight-800 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="text-white font-semibold">{hearing.title}</h4>
+                        <p className="text-midnight-400 text-sm">
+                          Created by: {hearing.created_by_name} • {new Date(hearing.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        hearing.status === 'active' ? 'bg-green-600 text-green-100' :
+                        hearing.status === 'closed' ? 'bg-gray-600 text-gray-100' :
+                        'bg-blue-600 text-blue-100'
+                      }`}>
+                        {hearing.status}
+                      </span>
+                    </div>
+
+                    <div className="mb-3 p-3 bg-midnight-700 rounded">
+                      <h5 className="text-midnight-300 text-xs mb-1">Question:</h5>
+                      <p className="text-white text-sm">{hearing.question}</p>
+                    </div>
+
+                    {hearing.responses && hearing.responses.length > 0 && (
+                      <div className="space-y-2">
+                        <h5 className="text-midnight-300 text-sm font-medium">
+                          Responses ({hearing.responses.length}):
+                        </h5>
+                        {hearing.responses.map((response, index) => (
+                          <div key={index} className="bg-midnight-700 rounded p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-white font-medium">{response.witness_name}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  response.agreement === 'agree' ? 'bg-green-600 text-green-100' :
+                                  response.agreement === 'disagree' ? 'bg-red-600 text-red-100' :
+                                  'bg-yellow-600 text-yellow-100'
+                                }`}>
+                                  {response.agreement || 'pending'}
+                                </span>
+                                <span className="text-midnight-400 text-xs">
+                                  {new Date(response.created_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                            {response.comment && (
+                              <p className="text-midnight-300 text-sm">{response.comment}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -375,6 +741,7 @@ const AssessmentPanel = ({ targetType, targetId, currentAssessment, onAssessment
                       </button>
                     ))}
                   </div>
+
                   {/* Visual Representation */}
                   <div className="mt-2 flex items-center space-x-1">
                     {renderDangerLevelCircles(selectedDangerLevel)}

@@ -1,91 +1,186 @@
-// 🔥 COMPLETE DATABASE SCHEMA WITH DIRECT SQL (NO RPC!)
+// 🔥 AUTOMATIC DATABASE TABLE CREATION WITH SUPABASE RPC INCLUDING HEARINGS
 
 export const createAllTables = async (supabase) => {
-  console.log('🚀 Creating COMPLETE database schema with DIRECT SQL...');
+  console.log('🚀 Creating database tables automatically...');
 
   try {
-    // 🎯 STEP 1: DROP ALL TABLES INDIVIDUALLY
-    console.log('🗑️ Dropping existing tables...');
-    const tablesToDrop = [
-      'assessment_history_ms2024',
-      'ship_journals_ms2024', 
-      'ship_assignments_ms2024',
-      'ships_ms2024',
-      'ship_models_ms2024',
-      'manufacturers_ms2024',
-      'org_relationships_ms2024',
-      'role_images_ms2024',
-      'memberships_ms2024',
-      'person_entries_ms2024',
-      'journals_ms2024',
-      'persons_ms2024',
-      'organizations_ms2024',
-      'users_ms2024'
-    ];
+    // 🔥 CREATE WITNESS STATEMENTS TABLE DIRECTLY
+    const { error: witnessTableError } = await supabase.rpc('create_witness_statements_table', {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS witness_statements_ms2024 (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          incident_id TEXT NOT NULL,
+          witness_user_id TEXT NOT NULL,
+          witness_name TEXT NOT NULL,
+          statement TEXT,
+          statement_status TEXT DEFAULT 'pending',
+          submitted_at TIMESTAMPTZ,
+          judge_comment TEXT,
+          judge_request TEXT,
+          judge_id TEXT,
+          judge_name TEXT,
+          judge_commented_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
 
-    // Drop tables one by one (ignore errors)
-    for (const table of tablesToDrop) {
-      try {
-        await supabase.from(table).delete().neq('id', 'dummy');
-      } catch (error) {
-        console.log(`Table ${table} doesn't exist or already empty`);
-      }
-    }
-
-    // 🎯 STEP 2: CREATE ORGANIZATIONS TABLE
-    console.log('📊 Creating organizations_ms2024...');
-    await supabase.from('organizations_ms2024').select('id').limit(1).then(async (result) => {
-      if (result.error) {
-        // Table doesn't exist, we need to create it via SQL Editor
-        console.log('⚠️ organizations_ms2024 table missing - needs manual creation');
-      }
+        ALTER TABLE witness_statements_ms2024 ENABLE ROW LEVEL SECURITY;
+        CREATE POLICY IF NOT EXISTS "Allow all access" ON witness_statements_ms2024 FOR ALL USING (true);
+        CREATE INDEX IF NOT EXISTS idx_witness_statements_incident ON witness_statements_ms2024(incident_id);
+        CREATE INDEX IF NOT EXISTS idx_witness_statements_witness ON witness_statements_ms2024(witness_user_id);
+        CREATE INDEX IF NOT EXISTS idx_witness_statements_status ON witness_statements_ms2024(statement_status);
+      `
     });
 
-    // 🎯 STEP 3: ADD MISSING COLUMNS TO EXISTING TABLES
-    console.log('🔧 Adding missing assessment columns...');
-    const assessmentColumns = [
-      { name: 'classification', type: 'TEXT DEFAULT \'harmless\'' },
-      { name: 'danger_level', type: 'INTEGER DEFAULT 1' },
-      { name: 'status', type: 'TEXT DEFAULT \'pending\'' },
-      { name: 'assessed_by_id', type: 'TEXT' },
-      { name: 'assessed_by_name', type: 'TEXT' },
-      { name: 'assessed_by_role', type: 'TEXT' },
-      { name: 'assessed_at', type: 'TIMESTAMPTZ' },
-      { name: 'assessment_notes', type: 'TEXT' },
-      { name: 'status_updated_by_id', type: 'TEXT' },
-      { name: 'status_updated_by_name', type: 'TEXT' },
-      { name: 'status_updated_by_role', type: 'TEXT' },
-      { name: 'status_updated_at', type: 'TIMESTAMPTZ' }
-    ];
+    // 🔥 CREATE HEARINGS TABLE DIRECTLY (NEW!)
+    const { error: hearingsTableError } = await supabase.rpc('create_hearings_table', {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS hearings_ms2024 (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          entry_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          question TEXT NOT NULL,
+          witness_ids TEXT[] DEFAULT '{}',
+          crime_types TEXT[] DEFAULT '{}',
+          entry_description TEXT,
+          status TEXT DEFAULT 'active',
+          responses JSONB DEFAULT '[]',
+          created_by_id TEXT NOT NULL,
+          created_by_name TEXT NOT NULL,
+          created_by_role TEXT NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
 
-    const tablesToUpdate = ['organizations_ms2024', 'persons_ms2024', 'person_entries_ms2024'];
+        ALTER TABLE hearings_ms2024 ENABLE ROW LEVEL SECURITY;
+        CREATE POLICY IF NOT EXISTS "Allow all access" ON hearings_ms2024 FOR ALL USING (true);
+        CREATE INDEX IF NOT EXISTS idx_hearings_entry ON hearings_ms2024(entry_id);
+        CREATE INDEX IF NOT EXISTS idx_hearings_creator ON hearings_ms2024(created_by_id);
+        CREATE INDEX IF NOT EXISTS idx_hearings_status ON hearings_ms2024(status);
+        CREATE INDEX IF NOT EXISTS idx_hearings_witnesses ON hearings_ms2024 USING GIN(witness_ids);
+      `
+    });
 
-    for (const tableName of tablesToUpdate) {
-      for (const column of assessmentColumns) {
-        try {
-          // Try to add column via a dummy update that will fail if column doesn't exist
-          await supabase
-            .from(tableName)
-            .update({ [column.name]: null })
-            .eq('id', 'dummy-test-id-that-does-not-exist');
+    if (witnessTableError || hearingsTableError) {
+      console.log('⚠️ RPC not available, using direct SQL execution...');
+      
+      // 🔥 FALLBACK: Direct table creation using raw SQL
+      const { error: directError } = await supabase
+        .from('witness_statements_ms2024')
+        .select('id')
+        .limit(1);
 
-          console.log(`✅ Column ${column.name} exists in ${tableName}`);
-        } catch (error) {
-          console.log(`❌ Column ${column.name} missing in ${tableName} - manual addition needed`);
-        }
+      // 🔥 CHECK HEARINGS TABLE
+      const { error: hearingsDirectError } = await supabase
+        .from('hearings_ms2024')
+        .select('id')
+        .limit(1);
+
+      if ((directError && directError.message.includes('does not exist')) || 
+          (hearingsDirectError && hearingsDirectError.message.includes('does not exist'))) {
+        console.log('🔧 Creating missing tables...');
+        console.log('📋 Please run this SQL in your Supabase SQL Editor:');
+        console.log(`
+          -- 🔥 CREATE WITNESS STATEMENTS TABLE
+          CREATE TABLE IF NOT EXISTS witness_statements_ms2024 (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            incident_id TEXT NOT NULL,
+            witness_user_id TEXT NOT NULL,
+            witness_name TEXT NOT NULL,
+            statement TEXT,
+            statement_status TEXT DEFAULT 'pending',
+            submitted_at TIMESTAMPTZ,
+            judge_comment TEXT,
+            judge_request TEXT,
+            judge_id TEXT,
+            judge_name TEXT,
+            judge_commented_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+
+          -- 🔥 CREATE HEARINGS TABLE (MISSING!)
+          CREATE TABLE IF NOT EXISTS hearings_ms2024 (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            entry_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            question TEXT NOT NULL,
+            witness_ids TEXT[] DEFAULT '{}',
+            crime_types TEXT[] DEFAULT '{}',
+            entry_description TEXT,
+            status TEXT DEFAULT 'active',
+            responses JSONB DEFAULT '[]',
+            created_by_id TEXT NOT NULL,
+            created_by_name TEXT NOT NULL,
+            created_by_role TEXT NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+          );
+
+          -- 🔥 ENABLE RLS AND CREATE POLICIES
+          ALTER TABLE witness_statements_ms2024 ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE hearings_ms2024 ENABLE ROW LEVEL SECURITY;
+          CREATE POLICY IF NOT EXISTS "Allow all access" ON witness_statements_ms2024 FOR ALL USING (true);
+          CREATE POLICY IF NOT EXISTS "Allow all access" ON hearings_ms2024 FOR ALL USING (true);
+
+          -- 🔥 CREATE INDEXES
+          CREATE INDEX IF NOT EXISTS idx_witness_statements_incident ON witness_statements_ms2024(incident_id);
+          CREATE INDEX IF NOT EXISTS idx_witness_statements_witness ON witness_statements_ms2024(witness_user_id);
+          CREATE INDEX IF NOT EXISTS idx_witness_statements_status ON witness_statements_ms2024(statement_status);
+          CREATE INDEX IF NOT EXISTS idx_hearings_entry ON hearings_ms2024(entry_id);
+          CREATE INDEX IF NOT EXISTS idx_hearings_creator ON hearings_ms2024(created_by_id);
+          CREATE INDEX IF NOT EXISTS idx_hearings_status ON hearings_ms2024(status);
+          CREATE INDEX IF NOT EXISTS idx_hearings_witnesses ON hearings_ms2024 USING GIN(witness_ids);
+        `);
+
+        return { 
+          success: false, 
+          error: 'witness_statements_ms2024 and/or hearings_ms2024 tables need to be created manually' 
+        };
       }
     }
 
-    console.log('🎉 Database validation completed!');
+    // 🔥 ADD MISSING COLUMNS TO PERSON_ENTRIES
+    await addMissingColumns(supabase);
+
+    console.log('✅ Database setup completed!');
     return { success: true };
 
   } catch (error) {
-    console.error('❌ Database validation failed:', error);
+    console.error('❌ Database setup failed:', error);
     return { success: false, error: error.message };
   }
 };
 
-// 🔥 SIMPLE FIELD VALIDATION
+const addMissingColumns = async (supabase) => {
+  console.log('🔧 Adding missing columns...');
+
+  const columnsToAdd = [
+    { table: 'person_entries_ms2024', column: 'reported_by_id', type: 'TEXT' },
+    { table: 'person_entries_ms2024', column: 'reported_by_name', type: 'TEXT' },
+    { table: 'person_entries_ms2024', column: 'reported_by_role', type: 'TEXT' },
+    { table: 'person_entries_ms2024', column: 'witness_names', type: 'TEXT' }
+  ];
+
+  for (const { table, column, type } of columnsToAdd) {
+    try {
+      // Try to select the column to see if it exists
+      const { error } = await supabase
+        .from(table)
+        .select(column)
+        .limit(1);
+
+      if (error && error.message.includes('column') && error.message.includes('does not exist')) {
+        console.log(`⚠️ Column ${column} missing in ${table} - needs manual addition`);
+      } else {
+        console.log(`✅ Column ${column} exists in ${table}`);
+      }
+    } catch (err) {
+      console.log(`❌ Error checking ${column} in ${table}:`, err.message);
+    }
+  }
+};
+
 export const validateAllFields = async (supabase) => {
   console.log('🔍 Validating database fields...');
 
@@ -93,10 +188,9 @@ export const validateAllFields = async (supabase) => {
 
   for (const tableName of tables) {
     try {
-      // Test if we can select basic fields
       const { data, error } = await supabase
         .from(tableName)
-        .select('id, classification, danger_level, status')
+        .select('id,classification,danger_level,status')
         .limit(1);
 
       if (error) {
@@ -111,79 +205,105 @@ export const validateAllFields = async (supabase) => {
     }
   }
 
+  // 🔥 CHECK WITNESS STATEMENTS TABLE
+  try {
+    const { data, error } = await supabase
+      .from('witness_statements_ms2024')
+      .select('id,incident_id,witness_user_id')
+      .limit(1);
+
+    if (error) {
+      console.error(`❌ Witness statements table missing:`, error.message);
+      return false;
+    }
+
+    console.log(`✅ witness_statements_ms2024 table exists`);
+  } catch (err) {
+    console.error(`❌ Error validating witness_statements_ms2024:`, err);
+    return false;
+  }
+
+  // 🔥 CHECK HEARINGS TABLE (NEW!)
+  try {
+    const { data, error } = await supabase
+      .from('hearings_ms2024')
+      .select('id,entry_id,title,question')
+      .limit(1);
+
+    if (error) {
+      console.error(`❌ Hearings table missing:`, error.message);
+      return false;
+    }
+
+    console.log(`✅ hearings_ms2024 table exists`);
+  } catch (err) {
+    console.error(`❌ Error validating hearings_ms2024:`, err);
+    return false;
+  }
+
   console.log('🎉 Field validation completed!');
   return true;
 };
 
-// 🔥 MANUAL SQL STATEMENTS FOR SUPABASE SQL EDITOR
 export const getCreateTableSQL = () => {
   return `
--- 🔥 USERS TABLE WITH ALL REQUIRED FIELDS AND MASTER USER
-ALTER TABLE users_ms2024 
-ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
-ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW(),
-ADD COLUMN IF NOT EXISTS is_master_user BOOLEAN DEFAULT false;
+    -- 🔥 MISSING COLUMNS FOR PERSON ENTRIES (REPORTER + WITNESSES)
+    ALTER TABLE person_entries_ms2024 
+    ADD COLUMN IF NOT EXISTS reported_by_id TEXT,
+    ADD COLUMN IF NOT EXISTS reported_by_name TEXT,
+    ADD COLUMN IF NOT EXISTS reported_by_role TEXT,
+    ADD COLUMN IF NOT EXISTS witness_names TEXT;
 
--- 🔥 FIX ROLE CONSTRAINT - ALLOW ALL VALID ROLES
-ALTER TABLE users_ms2024 DROP CONSTRAINT IF EXISTS users_ms2024_role_check;
-ALTER TABLE users_ms2024 ADD CONSTRAINT users_ms2024_role_check 
-CHECK (role IN ('sentinel', 'high_judge', 'judge', 'legal_authority', 'bounty_hunter', 'citizen'));
+    -- 🔥 CREATE WITNESS STATEMENTS TABLE
+    CREATE TABLE IF NOT EXISTS witness_statements_ms2024 (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      incident_id TEXT NOT NULL,
+      witness_user_id TEXT NOT NULL,
+      witness_name TEXT NOT NULL,
+      statement TEXT,
+      statement_status TEXT DEFAULT 'pending',
+      submitted_at TIMESTAMPTZ,
+      judge_comment TEXT,
+      judge_request TEXT,
+      judge_id TEXT,
+      judge_name TEXT,
+      judge_commented_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
--- 🔥 ORGANIZATIONS TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE organizations_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
+    -- 🔥 CREATE HEARINGS TABLE (MISSING!)
+    CREATE TABLE IF NOT EXISTS hearings_ms2024 (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entry_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      question TEXT NOT NULL,
+      witness_ids TEXT[] DEFAULT '{}',
+      crime_types TEXT[] DEFAULT '{}',
+      entry_description TEXT,
+      status TEXT DEFAULT 'active',
+      responses JSONB DEFAULT '[]',
+      created_by_id TEXT NOT NULL,
+      created_by_name TEXT NOT NULL,
+      created_by_role TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
--- 🔥 PERSONS TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE persons_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
+    -- 🔥 ENABLE RLS AND CREATE POLICIES
+    ALTER TABLE witness_statements_ms2024 ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE hearings_ms2024 ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY IF NOT EXISTS "Allow all access" ON witness_statements_ms2024 FOR ALL USING (true);
+    CREATE POLICY IF NOT EXISTS "Allow all access" ON hearings_ms2024 FOR ALL USING (true);
 
--- 🔥 PERSON ENTRIES TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE person_entries_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
-
--- 🔥 ADD CONSTRAINTS
-ALTER TABLE organizations_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_org_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-
-ALTER TABLE persons_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_person_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-
-ALTER TABLE person_entries_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_entry_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-`;
+    -- 🔥 CREATE INDEXES FOR PERFORMANCE
+    CREATE INDEX IF NOT EXISTS idx_person_entries_reporter ON person_entries_ms2024(reported_by_id);
+    CREATE INDEX IF NOT EXISTS idx_witness_statements_incident ON witness_statements_ms2024(incident_id);
+    CREATE INDEX IF NOT EXISTS idx_witness_statements_witness ON witness_statements_ms2024(witness_user_id);
+    CREATE INDEX IF NOT EXISTS idx_witness_statements_status ON witness_statements_ms2024(statement_status);
+    CREATE INDEX IF NOT EXISTS idx_hearings_entry ON hearings_ms2024(entry_id);
+    CREATE INDEX IF NOT EXISTS idx_hearings_creator ON hearings_ms2024(created_by_id);
+    CREATE INDEX IF NOT EXISTS idx_hearings_status ON hearings_ms2024(status);
+    CREATE INDEX IF NOT EXISTS idx_hearings_witnesses ON hearings_ms2024 USING GIN(witness_ids);
+  `;
 };

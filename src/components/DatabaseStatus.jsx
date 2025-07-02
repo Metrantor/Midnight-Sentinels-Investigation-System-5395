@@ -2,85 +2,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
+import DatabaseSetupHelper from './DatabaseSetupHelper';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 
-const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle, FiSettings, FiDatabase, FiCopy } = FiIcons;
+const { FiWifi, FiWifiOff, FiRefreshCw, FiAlertTriangle, FiSettings, FiDatabase } = FiIcons;
 
 const DatabaseStatus = () => {
   const { dbConnected, connectionError, loading, retryConnection, enablePolling, setEnablePolling } = useData();
   const { user, hasPermission } = useAuth();
-
-  // 🔥 COPY SQL TO CLIPBOARD
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text).then(() => {
-      alert('SQL copied to clipboard! Please run this in your Supabase SQL Editor.');
-    });
-  };
-
-  const sqlToRun = `
--- 🔥 USERS TABLE WITH ALL REQUIRED FIELDS
-ALTER TABLE users_ms2024 
-ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
-ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(),
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
-
--- 🔥 ORGANIZATIONS TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE organizations_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
-
--- 🔥 PERSONS TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE persons_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
-
--- 🔥 PERSON ENTRIES TABLE WITH ALL ASSESSMENT FIELDS
-ALTER TABLE person_entries_ms2024 
-ADD COLUMN IF NOT EXISTS classification TEXT DEFAULT 'harmless',
-ADD COLUMN IF NOT EXISTS danger_level INTEGER DEFAULT 1,
-ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
-ADD COLUMN IF NOT EXISTS assessed_by_id TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_name TEXT,
-ADD COLUMN IF NOT EXISTS assessed_by_role TEXT,
-ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS assessment_notes TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_id TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_name TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_by_role TEXT,
-ADD COLUMN IF NOT EXISTS status_updated_at TIMESTAMPTZ;
-
--- 🔥 ADD CONSTRAINTS
-ALTER TABLE organizations_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_org_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-
-ALTER TABLE persons_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_person_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-
-ALTER TABLE person_entries_ms2024 
-ADD CONSTRAINT IF NOT EXISTS chk_entry_danger_level CHECK (danger_level >= 1 AND danger_level <= 6);
-`;
 
   if (loading) {
     return (
@@ -101,45 +31,41 @@ ADD CONSTRAINT IF NOT EXISTS chk_entry_danger_level CHECK (danger_level >= 1 AND
 
   if (!dbConnected) {
     return (
-      <div className="fixed top-4 right-4 z-50">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg max-w-sm"
-        >
-          <div className="flex items-start space-x-3">
-            <SafeIcon icon={FiWifiOff} className="w-5 h-5 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium">Database Connection Failed</p>
-              {connectionError && (
-                <p className="text-xs text-red-200 mt-1">{connectionError}</p>
-              )}
-              
-              {/* 🔥 SQL COPY BUTTON */}
-              {connectionError?.includes('is_active') && (
-                <div className="mt-2 space-y-2">
-                  <p className="text-xs text-red-200">Missing database columns detected!</p>
-                  <button
-                    onClick={() => copyToClipboard(sqlToRun)}
-                    className="bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs flex items-center space-x-1 transition-colors"
-                  >
-                    <SafeIcon icon={FiCopy} className="w-3 h-3" />
-                    <span>Copy SQL Fix</span>
-                  </button>
-                </div>
-              )}
-              
-              <button
-                onClick={retryConnection}
-                className="mt-2 bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs flex items-center space-x-1 transition-colors"
-              >
-                <SafeIcon icon={FiRefreshCw} className="w-3 h-3" />
-                <span>Retry Connection</span>
-              </button>
+      <>
+        <div className="fixed top-4 right-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg max-w-sm"
+          >
+            <div className="flex items-start space-x-3">
+              <SafeIcon icon={FiWifiOff} className="w-5 h-5 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Database Connection Failed</p>
+                {connectionError && (
+                  <p className="text-xs text-red-200 mt-1">{connectionError}</p>
+                )}
+                <button
+                  onClick={retryConnection}
+                  className="mt-2 bg-red-700 hover:bg-red-800 text-white px-3 py-1 rounded text-xs flex items-center space-x-1 transition-colors"
+                >
+                  <SafeIcon icon={FiRefreshCw} className="w-3 h-3" />
+                  <span>Retry Connection</span>
+                </button>
+              </div>
             </div>
+          </motion.div>
+        </div>
+        
+        {/* 🔥 NEW: Show database setup helper when connection fails */}
+        {(connectionError?.includes('witness_statements') || 
+          connectionError?.includes('relation') || 
+          connectionError?.includes('does not exist')) && (
+          <div className="fixed inset-0 z-40 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <DatabaseSetupHelper />
           </div>
-        </motion.div>
-      </div>
+        )}
+      </>
     );
   }
 
